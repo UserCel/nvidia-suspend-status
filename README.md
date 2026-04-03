@@ -1,5 +1,5 @@
 # NVIDIA Suspend Status
-![Screenshot](screenshot.png)
+<img src="screenshot.png" width="500" alt="NVIDIA Suspend Status Screenshot">
 
 A KDE Plasma 6 widget to monitor your NVIDIA dGPU power state at a glance.
 
