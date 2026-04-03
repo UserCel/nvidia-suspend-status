@@ -1,5 +1,5 @@
-# NVIDIA Suspend Status
-<img src="screenshot.png" width="500" alt="NVIDIA Suspend Status Screenshot">
+# NVIDIA Status
+<img src="screenshot.png" width="500" alt="NVIDIA Status Screenshot">
 
 A KDE Plasma 6 widget to monitor your NVIDIA dGPU power state at a glance.
 
@@ -21,17 +21,17 @@ A KDE Plasma 6 widget to monitor your NVIDIA dGPU power state at a glance.
 ### From Source
 1. Clone the repository:
    ```bash
-   git clone https://github.com/UserCel/nvidia-suspend-status.git
+   git clone https://github.com/UserCel/plasma-applet-nvidia-status.git
    ```
 2. Install the widget:
    ```bash
    kpackagetool6 -t Plasma/Applet -i package/
    ```
-3. Restart Plasma or use the widget Browser to add **NVIDIA Suspend Status** to your panel or desktop.
+3. Restart Plasma or use the widget Browser to add **NVIDIA Status** to your panel or desktop.
 
 ## Configuration
 The widget needs to know the PCI address of your GPU to monitor its power state.
-1. Right-click the widget and select **Configure NVIDIA Suspend Status...**.
+1. Right-click the widget and select **Configure NVIDIA Status...**.
 2. Go to the **General** tab.
 3. Your GPU should be **automatically detected** in the dropdown list.
 4. If not, click **Detect** or manually enter the PCI address (e.g., `0000:01:00.0`).

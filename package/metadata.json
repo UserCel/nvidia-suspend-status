@@ -10,11 +10,11 @@
         "Category": "System Information",
         "Description": "Shows if NVIDIA dGPU is suspended (low power) or active",
         "EnabledByDefault": true,
-        "Id": "com.usercel.nvidiasuspend",
+        "Id": "com.usercel.nvidiastatus",
         "Icon": "utilities-system-monitor",
         "License": "GPL-3.0+",
-        "Name": "NVIDIA Suspend Status",
-        "Version": "1.0"
+        "Name": "NVIDIA Status",
+        "Version": "1.0.1"
     },
     "X-Plasma-API-Minimum-Version": "6.0",
     "X-Plasma-Provides": [

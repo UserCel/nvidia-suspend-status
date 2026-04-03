@@ -1,0 +1,47 @@
+name: Package and Release Plasmoid
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version and metadata
+        id: metadata
+        run: |
+          VERSION=$(grep '"Version":' package/metadata.json | cut -d '"' -f 4)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "FILENAME=plasma-applet-nvidia-status-${VERSION}.plasmoid" >> $GITHUB_OUTPUT
+
+      - name: Package Plasmoid
+        run: |
+          cd package
+          zip -r ../${{ steps.metadata.outputs.FILENAME }} .
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.metadata.outputs.FILENAME }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          body: |
+            Automated release for version ${{ steps.metadata.outputs.VERSION }}.
+            
+            ### Installation
+            1. Download the `.plasmoid` file below.
+            2. Install using:
+               ```bash
+               kpackagetool6 -t Plasma/Applet -i ${{ steps.metadata.outputs.FILENAME }}
+               ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
