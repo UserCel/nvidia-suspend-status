@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
+    <group name="General">
+        <entry name="pciAddress" type="String">
+            <default>0000:01:00.0</default>
+        </entry>
+        <entry name="showTextInCompact" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="updateInterval" type="Int">
+            <default>3</default>
+        </entry>
+        <entry name="activeColor" type="Color">
+            <default>#76b900</default>
+        </entry>
+        <entry name="suspendedColor" type="Color">
+            <default>#888888</default>
+        </entry>
+        <entry name="unknownColor" type="Color">
+            <default>#3daee9</default>
+        </entry>
+        <entry name="resumingColor" type="Color">
+            <default>#ffaa00</default>
+        </entry>
+    </group>
+</kcfg>

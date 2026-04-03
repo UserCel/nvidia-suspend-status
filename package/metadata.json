@@ -1,0 +1,23 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "",
+                "Name": "Ido Haim"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Shows if NVIDIA dGPU is suspended (low power) or active",
+        "EnabledByDefault": true,
+        "Id": "com.usercel.nvidiasuspend",
+        "Icon": "utilities-system-monitor",
+        "License": "GPL-3.0+",
+        "Name": "NVIDIA Suspend Status",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-Provides": [
+        "org.kde.plasma"
+    ]
+}

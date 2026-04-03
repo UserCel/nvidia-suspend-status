@@ -1,0 +1,14 @@
+# KDE Plasma Widget development ignores
+*.swp
+*.bak
+.DS_Store
+*.kdev4
+.directory
+*~
+
+# Build artifacts
+*.zip
+*.tar.gz
+
+# Guide
+publishing_guide.md
