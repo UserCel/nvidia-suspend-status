@@ -9,11 +9,11 @@
         "Category": "System Information",
         "Description": "Shows if NVIDIA dGPU is suspended (low power) or active",
         "EnabledByDefault": true,
-        "Id": "com.usercel.nvidiastatus",
+        "Id": "org.kde.usercel.nvidiastatus",
         "Icon": "utilities-system-monitor",
         "License": "GPL-3.0+",
         "Name": "NVIDIA Status",
-        "Version": "1.0.2",
+        "Version": "1.0.3",
         "Website": "https://github.com/UserCel/plasma-applet-nvidia-status/"
     },
     "X-Plasma-API-Minimum-Version": "6.0",
