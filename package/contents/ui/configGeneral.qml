@@ -12,6 +12,19 @@ Kirigami.FormLayout {
     property alias cfg_pciAddress: pciAddressField.text
     property alias cfg_showTextInCompact: showTextInCompact.checked
     property alias cfg_updateInterval: updateIntervalSpin.value
+    property string cfg_sortField: "sm"
+    property alias cfg_sortDescending: sortDescendingCheckBox.checked
+
+    onCfg_sortFieldChanged: {
+        if (sortFieldCombo.model) {
+            for (let i = 0; i < sortFieldCombo.model.length; i++) {
+                if (sortFieldCombo.model[i].value === cfg_sortField) {
+                    sortFieldCombo.currentIndex = i;
+                    break;
+                }
+            }
+        }
+    }
 
     // Color properties bound manually
     property color cfg_activeColor: "#76b900"
@@ -87,6 +100,40 @@ Kirigami.FormLayout {
         to: 3600
         stepSize: 1
         editable: true
+    }
+
+    // --- Process List Options ---
+    Kirigami.Separator {
+        Kirigami.FormData.isSection: true
+        Kirigami.FormData.label: i18n("Process List Options")
+    }
+
+    ComboBox {
+        id: sortFieldCombo
+        Kirigami.FormData.label: i18n("Default Sort By:")
+        textRole: "text"
+        model: [
+            { "text": i18n("GPU Usage (SM %)"), "value": "sm" },
+            { "text": i18n("Memory Usage (%)"), "value": "mem" },
+            { "text": i18n("Process Name"), "value": "name" }
+        ]
+        onActivated: (index) => {
+            page.cfg_sortField = model[index].value;
+        }
+        Component.onCompleted: {
+            for (let i = 0; i < model.length; i++) {
+                if (model[i].value === page.cfg_sortField) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    CheckBox {
+        id: sortDescendingCheckBox
+        Kirigami.FormData.label: i18n("Sort Order:")
+        text: i18n("Sort descending (highest first)")
     }
 
     // --- Status Colors ---

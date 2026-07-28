@@ -28,5 +28,11 @@
         <entry name="pinned" type="Bool">
             <default>false</default>
         </entry>
+        <entry name="sortField" type="String">
+            <default>sm</default>
+        </entry>
+        <entry name="sortDescending" type="Bool">
+            <default>true</default>
+        </entry>
     </group>
 </kcfg>

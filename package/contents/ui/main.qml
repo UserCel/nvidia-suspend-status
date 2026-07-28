@@ -17,9 +17,51 @@ PlasmoidItem {
     property string status: "unknown"
     property string statusText: i18n("Checking...")
     property var lastUpdate: new Date()
-    property var gpuProcesses: []
+    property string sortField: (plasmoid.configuration && plasmoid.configuration.sortField) || "sm"
+    property bool sortDescending: plasmoid.configuration && plasmoid.configuration.sortDescending !== undefined ? plasmoid.configuration.sortDescending : true
+    property var processHistory: ({})
+    property var rawGpuProcesses: []
+    property var gpuProcesses: sortProcesses(rawGpuProcesses, sortField, sortDescending)
     property string nvidiaSmiPath: ""
     property bool hasNvidiaSmi: nvidiaSmiPath !== ""
+    readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath
+
+    function parseVramInMb(memStr) {
+        if (!memStr) return 0;
+        const str = memStr.toString().trim();
+        const val = parseFloat(str);
+        if (isNaN(val)) return 0;
+        if (str.indexOf("GiB") !== -1 || str.indexOf("GB") !== -1) {
+            return val * 1024;
+        }
+        return val;
+    }
+
+    function sortProcesses(procList, field, descending) {
+        if (!procList || !procList.length) return [];
+        const listCopy = procList.slice();
+        listCopy.sort((a, b) => {
+            let valA, valB;
+            if (field === "name") {
+                valA = (a.name || "").toLowerCase();
+                valB = (b.name || "").toLowerCase();
+                if (valA < valB) return descending ? 1 : -1;
+                if (valA > valB) return descending ? -1 : 1;
+                return 0;
+            } else if (field === "mem") {
+                valA = parseVramInMb(a.mem);
+                valB = parseVramInMb(b.mem);
+            } else { // "sm" / GPU usage (default)
+                valA = parseFloat(a.sm) || 0;
+                valB = parseFloat(b.sm) || 0;
+            }
+            if (valA === valB) {
+                return (a.name || "").localeCompare(b.name || "");
+            }
+            return descending ? (valB - valA) : (valA - valB);
+        });
+        return listCopy;
+    }
 
     property color statusColor: {
         const cfg = plasmoid.configuration;
@@ -149,6 +191,7 @@ PlasmoidItem {
                 clip: true
                 headerPositioning: ListView.OverlayHeader
                 header: Item {
+                    id: headerItem
                     width: processList.width
                     height: Kirigami.Units.gridUnit * 1.5
                     visible: root.gpuProcesses.length > 0
@@ -156,35 +199,97 @@ PlasmoidItem {
                     readonly property int colWidth: Kirigami.Units.gridUnit * 5
                     readonly property int margin: Kirigami.Units.largeSpacing
 
-                    PlasmaComponents3.Label { 
-                        id: headerMem
-                        text: i18n("Mem")
-                        font.bold: true
+                    function getSortIndicator(field) {
+                        if (root.sortField !== field) return "";
+                        return root.sortDescending ? " ▼" : " ▲";
+                    }
+
+                    // Memory Column Header
+                    MouseArea {
+                        id: headerMemArea
                         width: parent.colWidth
+                        height: parent.height
                         anchors.right: parent.right
                         anchors.rightMargin: parent.margin
-                        anchors.verticalCenter: parent.verticalCenter
-                        horizontalAlignment: Text.AlignHCenter 
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (plasmoid.configuration.sortField === "mem") {
+                                plasmoid.configuration.sortDescending = !plasmoid.configuration.sortDescending;
+                            } else {
+                                plasmoid.configuration.sortField = "mem";
+                                plasmoid.configuration.sortDescending = true;
+                            }
+                        }
+
+                        PlasmaComponents3.Label { 
+                            id: headerMem
+                            text: i18n("Mem") + headerItem.getSortIndicator("mem")
+                            font.bold: true
+                            anchors.fill: parent
+                            verticalAlignment: Text.AlignVCenter
+                            horizontalAlignment: Text.AlignHCenter 
+                            color: headerMemArea.containsMouse || root.sortField === "mem" ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        }
                     }
-                    PlasmaComponents3.Label { 
-                        id: headerGpu
-                        text: i18n("GPU")
-                        font.bold: true
+
+                    // GPU Column Header
+                    MouseArea {
+                        id: headerGpuArea
                         width: parent.colWidth
-                        anchors.right: headerMem.left
+                        height: parent.height
+                        anchors.right: headerMemArea.left
                         anchors.rightMargin: parent.margin
-                        anchors.verticalCenter: parent.verticalCenter
-                        horizontalAlignment: Text.AlignHCenter 
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (plasmoid.configuration.sortField === "sm") {
+                                plasmoid.configuration.sortDescending = !plasmoid.configuration.sortDescending;
+                            } else {
+                                plasmoid.configuration.sortField = "sm";
+                                plasmoid.configuration.sortDescending = true;
+                            }
+                        }
+
+                        PlasmaComponents3.Label { 
+                            id: headerGpu
+                            text: i18n("GPU") + headerItem.getSortIndicator("sm")
+                            font.bold: true
+                            anchors.fill: parent
+                            verticalAlignment: Text.AlignVCenter
+                            horizontalAlignment: Text.AlignHCenter 
+                            color: headerGpuArea.containsMouse || root.sortField === "sm" ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        }
                     }
-                    PlasmaComponents3.Label { 
-                        text: i18n("Process Name")
-                        font.bold: true
+
+                    // Process Name Column Header
+                    MouseArea {
+                        id: headerNameArea
+                        height: parent.height
                         anchors.left: parent.left
                         anchors.leftMargin: parent.margin
-                        anchors.right: headerGpu.left
+                        anchors.right: headerGpuArea.left
                         anchors.rightMargin: parent.margin
-                        anchors.verticalCenter: parent.verticalCenter
-                        elide: Text.ElideRight
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (plasmoid.configuration.sortField === "name") {
+                                plasmoid.configuration.sortDescending = !plasmoid.configuration.sortDescending;
+                            } else {
+                                plasmoid.configuration.sortField = "name";
+                                plasmoid.configuration.sortDescending = false;
+                            }
+                        }
+
+                        PlasmaComponents3.Label { 
+                            text: i18n("Process Name") + headerItem.getSortIndicator("name")
+                            font.bold: true
+                            anchors.fill: parent
+                            verticalAlignment: Text.AlignVCenter
+                            horizontalAlignment: Text.AlignLeft
+                            elide: Text.ElideRight
+                            color: headerNameArea.containsMouse || root.sortField === "name" ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        }
                     }
                 }
 
@@ -201,13 +306,17 @@ PlasmoidItem {
                     contentItem: Item {
                         PlasmaComponents3.Label { 
                             id: dataMem
-                            text: modelData.mem + "%"
+                            text: {
+                                const m = (modelData.mem || "0").toString();
+                                if (m.indexOf("B") !== -1 || m.indexOf("%") !== -1) return m;
+                                return m + "%";
+                            }
                             width: parent.parent.colWidth
                             anchors.right: parent.right
                             anchors.rightMargin: parent.parent.margin
                             anchors.verticalCenter: parent.verticalCenter
                             horizontalAlignment: Text.AlignHCenter 
-                            color: modelData.mem > 0 ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor 
+                            color: root.parseVramInMb(modelData.mem) > 0 ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor 
                         }
                         PlasmaComponents3.Label { 
                             id: dataGpu
@@ -217,7 +326,7 @@ PlasmoidItem {
                             anchors.rightMargin: parent.parent.margin
                             anchors.verticalCenter: parent.verticalCenter
                             horizontalAlignment: Text.AlignHCenter 
-                            color: modelData.sm > 0 ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor 
+                            color: parseFloat(modelData.sm) > 0 ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor 
                         }
                         ColumnLayout {
                             spacing: 0
@@ -277,7 +386,8 @@ PlasmoidItem {
 
             if (result === "suspended") {
                 root.statusText = i18n("Suspended (D3cold)");
-                root.gpuProcesses = []; // Clear processes when suspended
+                root.processHistory = {};
+                root.rawGpuProcesses = []; // Clear processes when suspended
             } else if (result === "active") {
                 root.statusText = i18n("Active (D0)");
             } else if (result === "resuming") {
@@ -304,28 +414,112 @@ PlasmoidItem {
                     root.nvidiaSmiPath = discoveredPath;
                 }
             } else {
-                const lines = stdout.split("\n");
-                const processes = [];
-                for (let i = 2; i < lines.length; i++) {
-                    const line = lines[i].trim();
+                const partsOut = stdout.split("---PROCESSES---");
+                const pmonOut = partsOut[0] || "";
+                const smiOut = partsOut[1] || "";
+
+                // 1. Parse pmon data
+                const pmonMap = {};
+                const pmonLines = pmonOut.split("\n");
+                for (let i = 2; i < pmonLines.length; i++) {
+                    const line = pmonLines[i].trim();
                     if (!line || line.startsWith("#")) continue;
-                    
                     const parts = line.split(/\s+/);
-                    
                     if (parts.length >= 10) {
+                        const pid = parts[1];
+                        const type = parts[2];
+                        const sm = parts[3];
+                        const mem = parts[4];
                         const name = parts.slice(9).join(" ").trim();
-                        if (name === "" || name === "-") continue;
-                        
-                        processes.push({
-                            "pid": parts[1],
-                            "type": parts[2],
-                            "sm": parts[3] === "-" ? "0" : parts[3],
-                            "mem": parts[4] === "-" ? "0" : parts[4],
-                            "name": name
-                        });
+                        if (name && name !== "-") {
+                            pmonMap[pid] = { pid, type, sm, mem, name };
+                        }
                     }
                 }
-                root.gpuProcesses = processes;
+
+                // 2. Parse standard nvidia-smi process table data
+                const processMap = {};
+                const smiLines = smiOut.split("\n");
+                const procRegex = /\|\s*\d+\s+(?:N\/A|\d+)\s+(?:N\/A|\d+)\s+(\d+)\s+(\S+)\s+(.*?)\s+(\d+(?:\.\d+)?\s*(?:MiB|MB|GiB|GB))\s*\|/;
+
+                for (let i = 0; i < smiLines.length; i++) {
+                    const match = smiLines[i].match(procRegex);
+                    if (match) {
+                        const pid = match[1];
+                        const type = match[2];
+                        let name = match[3].trim();
+                        const vram = match[4].trim();
+
+                        if (name.lastIndexOf("\\") !== -1) {
+                            name = name.substring(name.lastIndexOf("\\") + 1);
+                        } else if (name.lastIndexOf("/") !== -1 && name.length > 30) {
+                            name = name.substring(name.lastIndexOf("/") + 1);
+                        }
+
+                        processMap[pid] = { pid, type, name, vram };
+                    }
+                }
+
+                // If smiOut didn't return process lines, fallback to pmon processes
+                for (const pid in pmonMap) {
+                    if (!processMap[pid]) {
+                        processMap[pid] = {
+                            pid: pid,
+                            type: pmonMap[pid].type,
+                            name: pmonMap[pid].name,
+                            vram: pmonMap[pid].mem !== "-" ? pmonMap[pid].mem + "%" : "0 MB"
+                        };
+                    }
+                }
+
+                // 3. Build merged process list with smoothing
+                const newHistory = {};
+                const finalProcesses = [];
+
+                for (const pid in processMap) {
+                    const item = processMap[pid];
+                    const pmonItem = pmonMap[pid];
+
+                    let name = item.name;
+                    if (pmonItem && pmonItem.name && pmonItem.name.length > 0 && name.indexOf("...") !== -1) {
+                        name = pmonItem.name;
+                    }
+
+                    let rawSm = pmonItem ? pmonItem.sm : "-";
+                    let smVal = (rawSm === "-" || rawSm === undefined) ? null : parseFloat(rawSm);
+                    if (isNaN(smVal)) smVal = null;
+
+                    const key = pid + "_" + name;
+                    const prev = root.processHistory[key];
+
+                    let smGrace = 0;
+                    if (prev) {
+                        if ((smVal === 0 || smVal === null) && prev.sm > 0 && prev.smGrace < 10) {
+                            smVal = prev.sm;
+                            smGrace = prev.smGrace + 1;
+                        }
+                    }
+
+                    const finalSm = (smVal !== null && !isNaN(smVal)) ? smVal : 0;
+                    const finalMem = item.vram || (pmonItem && pmonItem.mem !== "-" ? pmonItem.mem + "%" : "0 MB");
+
+                    newHistory[key] = {
+                        sm: finalSm,
+                        smGrace: smGrace,
+                        vram: finalMem
+                    };
+
+                    finalProcesses.push({
+                        "pid": pid,
+                        "type": item.type,
+                        "sm": finalSm.toString(),
+                        "mem": finalMem,
+                        "name": name
+                    });
+                }
+
+                root.processHistory = newHistory;
+                root.rawGpuProcesses = finalProcesses;
             }
             disconnectSource(sourceName);
         }
@@ -339,8 +533,8 @@ PlasmoidItem {
     // Refresh processes when expanded
     onExpandedChanged: (expanded) => {
         if (expanded && root.status === "active" && root.hasNvidiaSmi) {
-            gpuProcessesSource.disconnectSource(root.nvidiaSmiPath + " pmon -c 1");
-            gpuProcessesSource.connectSource(root.nvidiaSmiPath + " pmon -c 1");
+            gpuProcessesSource.disconnectSource(root.getProcessCmd);
+            gpuProcessesSource.connectSource(root.getProcessCmd);
         }
     }
 
@@ -358,9 +552,8 @@ PlasmoidItem {
             // Only query processes if expanded AND gpu is active AND tool was found
             // This is the "No-Wake" Guardian: it prevents nvidia-smi from waking the GPU
             if (root.expanded && root.status === "active" && root.hasNvidiaSmi) {
-                const cmd = root.nvidiaSmiPath + " pmon -c 1";
-                gpuProcessesSource.disconnectSource(cmd);
-                gpuProcessesSource.connectSource(cmd);
+                gpuProcessesSource.disconnectSource(root.getProcessCmd);
+                gpuProcessesSource.connectSource(root.getProcessCmd);
             }
         }
     }
