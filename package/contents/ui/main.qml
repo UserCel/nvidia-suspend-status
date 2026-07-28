@@ -25,6 +25,23 @@ PlasmoidItem {
     property string nvidiaSmiPath: ""
     property bool hasNvidiaSmi: nvidiaSmiPath !== ""
     readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath
+    property int idleBackoffCount: 0
+    property double lastSmiQueryTime: 0
+
+    function isUserProcess(proc) {
+        if (!proc) return false;
+        const rawName = (proc.name || "").toLowerCase();
+        let basename = rawName;
+        const lastSlash = Math.max(rawName.lastIndexOf("/"), rawName.lastIndexOf("\\"));
+        if (lastSlash !== -1) {
+            basename = rawName.substring(lastSlash + 1);
+        }
+
+        if (basename === "kwin_wayland" || basename === "xwayland" || basename === "systemd" || basename === "plasmashell" || basename === "kwin") {
+            return false;
+        }
+        return true;
+    }
 
     function parseVramInMb(memStr) {
         if (!memStr) return 0;
@@ -379,15 +396,16 @@ PlasmoidItem {
         engine: "executable"
         connectedSources: []
         onNewData: function(sourceName, data) {
+            const oldStatus = root.status;
             const result = data["stdout"] ? data["stdout"].trim() : "";
             root.status = result;
             root.lastUpdate = new Date();
-            // ...
 
             if (result === "suspended") {
                 root.statusText = i18n("Suspended (D3cold)");
                 root.processHistory = {};
                 root.rawGpuProcesses = []; // Clear processes when suspended
+                root.idleBackoffCount = 0;
             } else if (result === "active") {
                 root.statusText = i18n("Active (D0)");
             } else if (result === "resuming") {
@@ -437,13 +455,22 @@ PlasmoidItem {
                     }
                 }
 
-                // 2. Parse standard nvidia-smi process table data
+                // 2. Parse standard nvidia-smi process table data & overall GPU utilization
+                let overallGpuUtil = null;
                 const processMap = {};
                 const smiLines = smiOut.split("\n");
                 const procRegex = /\|\s*\d+\s+(?:N\/A|\d+)\s+(?:N\/A|\d+)\s+(\d+)\s+(\S+)\s+(.*?)\s+(\d+(?:\.\d+)?\s*(?:MiB|MB|GiB|GB))\s*\|/;
 
                 for (let i = 0; i < smiLines.length; i++) {
-                    const match = smiLines[i].match(procRegex);
+                    const line = smiLines[i];
+                    if (line.indexOf("MiB /") !== -1 || line.indexOf("GiB /") !== -1 || line.indexOf("MB /") !== -1) {
+                        const matchUtil = line.match(/\|\s*(\d+)%\s+(?:Default|Exclusive|Prohibited|Process)/);
+                        if (matchUtil) {
+                            overallGpuUtil = parseFloat(matchUtil[1]);
+                        }
+                    }
+
+                    const match = line.match(procRegex);
                     if (match) {
                         const pid = match[1];
                         const type = match[2];
@@ -452,7 +479,7 @@ PlasmoidItem {
 
                         if (name.lastIndexOf("\\") !== -1) {
                             name = name.substring(name.lastIndexOf("\\") + 1);
-                        } else if (name.lastIndexOf("/") !== -1 && name.length > 30) {
+                        } else if (name.lastIndexOf("/") !== -1) {
                             name = name.substring(name.lastIndexOf("/") + 1);
                         }
 
@@ -472,7 +499,15 @@ PlasmoidItem {
                     }
                 }
 
-                // 3. Build merged process list with smoothing
+                // Count active user processes
+                let totalUserProcs = 0;
+                for (const pid in processMap) {
+                    if (root.isUserProcess(processMap[pid])) {
+                        totalUserProcs++;
+                    }
+                }
+
+                // 3. Build merged process list with smoothing and overall GPU utilization fallback
                 const newHistory = {};
                 const finalProcesses = [];
 
@@ -489,15 +524,20 @@ PlasmoidItem {
                     let smVal = (rawSm === "-" || rawSm === undefined) ? null : parseFloat(rawSm);
                     if (isNaN(smVal)) smVal = null;
 
-                    const key = pid + "_" + name;
+                    const key = pid; // Use stable PID key
                     const prev = root.processHistory[key];
 
                     let smGrace = 0;
-                    if (prev) {
-                        if ((smVal === 0 || smVal === null) && prev.sm > 0 && prev.smGrace < 10) {
-                            smVal = prev.sm;
-                            smGrace = prev.smGrace + 1;
-                        }
+
+                    if (smVal !== null && smVal > 0) {
+                        smGrace = 0;
+                    } else if (prev && prev.sm > 0 && prev.smGrace < 30) {
+                        smVal = prev.sm;
+                        smGrace = prev.smGrace + 1;
+                    } else if (root.isUserProcess(item) && overallGpuUtil !== null && overallGpuUtil > 0) {
+                        // Fallback: If pmon reports 0% for a active user process, use overall GPU utilization
+                        smVal = (totalUserProcs > 1) ? Math.round(overallGpuUtil / totalUserProcs) : overallGpuUtil;
+                        smGrace = 0;
                     }
 
                     const finalSm = (smVal !== null && !isNaN(smVal)) ? smVal : 0;
@@ -518,6 +558,19 @@ PlasmoidItem {
                     });
                 }
 
+                let userProcCount = 0;
+                for (let i = 0; i < finalProcesses.length; i++) {
+                    if (root.isUserProcess(finalProcesses[i])) {
+                        userProcCount++;
+                    }
+                }
+
+                if (userProcCount === 0) {
+                    root.idleBackoffCount = 1;
+                } else {
+                    root.idleBackoffCount = 0;
+                }
+
                 root.processHistory = newHistory;
                 root.rawGpuProcesses = finalProcesses;
             }
@@ -533,6 +586,8 @@ PlasmoidItem {
     // Refresh processes when expanded
     onExpandedChanged: (expanded) => {
         if (expanded && root.status === "active" && root.hasNvidiaSmi) {
+            root.idleBackoffCount = 0;
+            root.lastSmiQueryTime = Date.now();
             gpuProcessesSource.disconnectSource(root.getProcessCmd);
             gpuProcessesSource.connectSource(root.getProcessCmd);
         }
@@ -549,11 +604,13 @@ PlasmoidItem {
             gpuStatusSource.disconnectSource("cat /sys/bus/pci/devices/" + addr + "/power/runtime_status");
             gpuStatusSource.connectSource("cat /sys/bus/pci/devices/" + addr + "/power/runtime_status");
             
-            // Only query processes if expanded AND gpu is active AND tool was found
-            // This is the "No-Wake" Guardian: it prevents nvidia-smi from waking the GPU
+            // Only query processes if expanded AND gpu is active AND tool was found AND user processes exist (idleBackoffCount < 1)
+            // This is the "No-Wake" Guardian: stops nvidia-smi to allow Linux PCI runtime PM to auto-suspend the GPU
             if (root.expanded && root.status === "active" && root.hasNvidiaSmi) {
-                gpuProcessesSource.disconnectSource(root.getProcessCmd);
-                gpuProcessesSource.connectSource(root.getProcessCmd);
+                if (root.idleBackoffCount < 1) {
+                    gpuProcessesSource.disconnectSource(root.getProcessCmd);
+                    gpuProcessesSource.connectSource(root.getProcessCmd);
+                }
             }
         }
     }
