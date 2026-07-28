@@ -2,19 +2,22 @@
 <img src="screenshot.png" width="500" alt="NVIDIA Status Screenshot">
 <img src="screenshot2.png" width="250" alt="NVIDIA Status Screenshot 2">
 
-KDE Plasma 6 widget for monitoring NVIDIA GPU power state and active processes.
+KDE Plasma 6 widget for monitoring NVIDIA GPU power state (`Suspended / D3cold` vs `Active / D0`) and active processes.
 
 ## Features
-- **GPU Status**: Monitor `Suspended` or `Active` power states via sysfs.
-- **Process Tracking**: List applications using the GPU with SM and Memory usage percentages.
-- **Power Efficient**: Only calls `nvidia-smi` when the GPU is already active to prevent accidental wake-ups.
-- **Dynamic Discovery**: Automatically locates `nvidia-smi` in standard and local bin paths.
-- **Persistent Header**: Optional pinning to keep the popup open and shortcut to settings.
+- **GPU Status Monitor**: Real-time monitoring of `Suspended (D3cold)` and `Active (D0)` power states via sysfs.
+- **Process Tracking**: Lists applications using the dGPU with GPU utilization (%) and VRAM memory consumption.
+- **Flexible Display Modes**: Use as a compact panel applet or place directly on your desktop / secondary monitor as a floating widget.
+- **Configurable Process Sorting**: Sort processes by GPU Usage (SM %), VRAM allocation, or Process Name with ascending/descending toggles.
+- **Smart Power Guardian**: Automatically pauses polling when user applications close, allowing the dGPU to enter `D3cold` sleep state even while keeping the process list view open. Filters out background desktop compositor tasks (`kwin_wayland`, `plasmashell`).
+- **Proton / DXVK Support**: Accurately tracks GPU percentage for Vulkan and Direct3D games.
+- **Dynamic Discovery**: Automatically detects `nvidia-smi` across system and user binary paths.
+- **Persistent Header**: Optional pinning to keep popups open and shortcut to settings.
 
 ## Requirements
 - KDE Plasma 6
 - NVIDIA Proprietary Driver
-- `nvidia-smi` (for process list)
+- `nvidia-smi` (optional — for process list)
 
 ## Installation
 ### From Source
@@ -35,6 +38,7 @@ KDE Plasma 6 widget for monitoring NVIDIA GPU power state and active processes.
 - **PCI Address**: Automatically detected, but can be manually set if necessary.
 - **Polling Interval**: Adjustable from settings (default: 3 seconds).
 - **Appearance**: Customizable colors for different power states and toggleable panel text.
+- **Process Sorting**: Click list column headers to sort by Process Name, GPU %, or VRAM.
 
 ## License
 GPL-3.0-or-later
