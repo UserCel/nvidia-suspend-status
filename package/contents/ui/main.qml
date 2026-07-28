@@ -13,6 +13,9 @@ PlasmoidItem {
     Plasmoid.status: PlasmaCore.Types.ActiveStatus
     hideOnWindowDeactivate: !Plasmoid.configuration.pinned
 
+    Layout.minimumWidth: root.isOnDesktop ? Kirigami.Units.gridUnit * 18 : -1
+    Layout.minimumHeight: root.isOnDesktop ? Kirigami.Units.gridUnit * 16 : -1
+
     // --- Properties ---
     property string status: "unknown"
     property string statusText: i18n("Checking...")
@@ -92,8 +95,12 @@ PlasmoidItem {
     toolTipMainText: i18n("NVIDIA GPU Status")
     toolTipSubText: i18n("Current State: %1", statusText)
 
+    // --- Desktop / Panel Representation Helper ---
+    readonly property bool isOnDesktop: Plasmoid.location === PlasmaCore.Types.Floating || Plasmoid.location === PlasmaCore.Types.Desktop || Plasmoid.formFactor === PlasmaCore.Types.Planar
+    readonly property bool isViewActive: root.expanded || isOnDesktop
+
     // --- Representations ---
-    preferredRepresentation: compactRepresentation
+    preferredRepresentation: isOnDesktop ? fullRepresentation : compactRepresentation
 
     compactRepresentation: MouseArea {
         id: compactRoot
@@ -141,8 +148,10 @@ PlasmoidItem {
 
     fullRepresentation: PlasmaExtras.Representation {
         id: fullRep
+        Layout.minimumWidth: Kirigami.Units.gridUnit * 18
+        Layout.minimumHeight: Kirigami.Units.gridUnit * 16
         implicitWidth: Kirigami.Units.gridUnit * 22
-        implicitHeight: Kirigami.Units.gridUnit * 18
+        implicitHeight: Kirigami.Units.gridUnit * 20
 
         header: PlasmaExtras.PlasmoidHeading {
             contentHeight: headerLayout.implicitHeight
@@ -161,6 +170,7 @@ PlasmoidItem {
                     onClicked: Plasmoid.internalAction("configure").trigger()
                 }
                 PlasmaComponents3.ToolButton {
+                    visible: !root.isOnDesktop
                     icon.name: "window-pin-symbolic"
                     display: PlasmaComponents3.ToolButton.IconOnly
                     checkable: true
@@ -604,9 +614,9 @@ PlasmoidItem {
             gpuStatusSource.disconnectSource("cat /sys/bus/pci/devices/" + addr + "/power/runtime_status");
             gpuStatusSource.connectSource("cat /sys/bus/pci/devices/" + addr + "/power/runtime_status");
             
-            // Only query processes if expanded AND gpu is active AND tool was found AND user processes exist (idleBackoffCount < 1)
+            // Only query processes if view is active (expanded popup or desktop widget) AND gpu is active AND tool was found AND user processes exist (idleBackoffCount < 1)
             // This is the "No-Wake" Guardian: stops nvidia-smi to allow Linux PCI runtime PM to auto-suspend the GPU
-            if (root.expanded && root.status === "active" && root.hasNvidiaSmi) {
+            if (root.isViewActive && root.status === "active" && root.hasNvidiaSmi) {
                 if (root.idleBackoffCount < 1) {
                     gpuProcessesSource.disconnectSource(root.getProcessCmd);
                     gpuProcessesSource.connectSource(root.getProcessCmd);
