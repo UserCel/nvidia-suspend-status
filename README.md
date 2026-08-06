@@ -20,6 +20,15 @@ KDE Plasma 6 widget for monitoring NVIDIA GPU power state (`Suspended / D3cold` 
 - `nvidia-smi` (optional — for process list)
 
 ## Installation
+
+### From KDE Store (Recommended)
+You can install this applet directly through KDE Plasma:
+1. Right-click your panel or desktop and select **Add Widgets...**
+2. Click **Get New Widgets...** -> **Download New Plasma Widgets**
+3. Search for **NVIDIA Status** and click **Install**
+
+Alternatively, view or download it directly from the [KDE Store](https://store.kde.org/p/2354531/).
+
 ### From Source
 1. Clone the repository:
    ```bash
