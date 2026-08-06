@@ -10,6 +10,9 @@ KDE Plasma 6 widget for monitoring NVIDIA GPU power state (`Suspended / D3cold` 
 - **Flexible Display Modes**: Use as a compact panel applet or place directly on your desktop / secondary monitor as a floating widget.
 - **Configurable Process Sorting**: Sort processes by GPU Usage (SM %), VRAM allocation, or Process Name with ascending/descending toggles.
 - **Smart Power Guardian**: Automatically pauses polling when user applications close, allowing the dGPU to enter `D3cold` sleep state even while keeping the process list view open. Filters out background desktop compositor tasks (`kwin_wayland`, `plasmashell`).
+- **GPU Telemetry & VRAM Meter**: Visual progress bar for total dGPU VRAM allocation along with live temperature (°C) and power draw (Watts) telemetry.
+- **Process Management**: Directly terminate (`SIGTERM`) or force kill (`SIGKILL`) user applications keeping the dGPU awake (with safe protection for system processes like `kwin_wayland` and a settings toggle to enable/disable).
+- **Process Icon Resolution**: Automatically resolves desktop icons for apps, games, tools, and system processes running on the dGPU (configurable in settings).
 - **Proton / DXVK Support**: Accurately tracks GPU percentage for Vulkan and Direct3D games.
 - **Dynamic Discovery**: Automatically detects `nvidia-smi` across system and user binary paths.
 - **Persistent Header**: Optional pinning to keep popups open and shortcut to settings.

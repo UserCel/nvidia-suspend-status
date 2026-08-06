@@ -5,248 +5,161 @@ import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
 
-Kirigami.FormLayout {
-    id: page
+ScrollView {
+    id: scrollRoot
+    contentWidth: availableWidth
 
-    // Standard Plasma config properties
-    property alias cfg_pciAddress: pciAddressField.text
-    property alias cfg_showTextInCompact: showTextInCompact.checked
-    property alias cfg_updateInterval: updateIntervalSpin.value
-    property string cfg_sortField: "sm"
-    property alias cfg_sortDescending: sortDescendingCheckBox.checked
+    // Standard Plasma config properties exposed at root level
+    property alias cfg_pciAddress: page.cfg_pciAddress
+    property alias cfg_showTextInCompact: page.cfg_showTextInCompact
+    property alias cfg_allowProcessTermination: page.cfg_allowProcessTermination
+    property alias cfg_showProcessIcons: page.cfg_showProcessIcons
+    property alias cfg_updateInterval: page.cfg_updateInterval
+    property alias cfg_sortField: page.cfg_sortField
+    property alias cfg_sortDescending: page.cfg_sortDescending
+    property alias cfg_activeColor: page.cfg_activeColor
+    property alias cfg_suspendedColor: page.cfg_suspendedColor
+    property alias cfg_unknownColor: page.cfg_unknownColor
+    property alias cfg_resumingColor: page.cfg_resumingColor
 
-    onCfg_sortFieldChanged: {
-        if (sortFieldCombo.model) {
-            for (let i = 0; i < sortFieldCombo.model.length; i++) {
-                if (sortFieldCombo.model[i].value === cfg_sortField) {
-                    sortFieldCombo.currentIndex = i;
-                    break;
+    Kirigami.FormLayout {
+        id: page
+        width: scrollRoot.availableWidth
+
+        // Standard Plasma config properties
+        property alias cfg_pciAddress: pciAddressField.text
+        property alias cfg_showTextInCompact: showTextInCompact.checked
+        property alias cfg_allowProcessTermination: allowProcessTerminationCheckBox.checked
+        property alias cfg_showProcessIcons: showProcessIconsCheckBox.checked
+        property alias cfg_updateInterval: updateIntervalSpin.value
+        property string cfg_sortField: "sm"
+        property alias cfg_sortDescending: sortDescendingCheckBox.checked
+
+        onCfg_sortFieldChanged: {
+            if (sortFieldCombo.model) {
+                for (let i = 0; i < sortFieldCombo.model.length; i++) {
+                    if (sortFieldCombo.model[i].value === cfg_sortField) {
+                        sortFieldCombo.currentIndex = i;
+                        break;
+                    }
                 }
             }
         }
-    }
 
-    // Color properties bound manually
-    property color cfg_activeColor: "#76b900"
-    property color cfg_suspendedColor: "#888888"
-    property color cfg_unknownColor: "#ffaa00"
-    property color cfg_resumingColor: "#3daee9"
+        // Color properties bound manually
+        property color cfg_activeColor: "#76b900"
+        property color cfg_suspendedColor: "#888888"
+        property color cfg_unknownColor: "#ffaa00"
+        property color cfg_resumingColor: "#3daee9"
 
-    // Internal GPU detection state
-    property var gpuList: []
-    property bool searching: false
+        // Internal GPU detection state
+        property var gpuList: []
+        property bool searching: false
 
-    // --- Color Dialogs ---
-    ColorDialog {
-        id: activeColorDialog
-        title: i18n("Pick Active State Color")
-        selectedColor: page.cfg_activeColor
-        onAccepted: page.cfg_activeColor = selectedColor
-    }
-    ColorDialog {
-        id: suspendedColorDialog
-        title: i18n("Pick Suspended State Color")
-        selectedColor: page.cfg_suspendedColor
-        onAccepted: page.cfg_suspendedColor = selectedColor
-    }
-    ColorDialog {
-        id: unknownColorDialog
-        title: i18n("Pick Unknown State Color")
-        selectedColor: page.cfg_unknownColor
-        onAccepted: page.cfg_unknownColor = selectedColor
-    }
-    ColorDialog {
-        id: resumingColorDialog
-        title: i18n("Pick Resuming State Color")
-        selectedColor: page.cfg_resumingColor
-        onAccepted: page.cfg_resumingColor = selectedColor
-    }
-
-    // --- GPU Detection DataSource ---
-    Plasma5Support.DataSource {
-        id: detectionSource
-        engine: "executable"
-        connectedSources: []
-        onNewData: (sourceName, data) => {
-            const output = data["stdout"] ? data["stdout"].trim() : "";
-            const foundItems = [];
-            if (output) {
-                const lines = output.split(/\n+/);
-                for (let line of lines) {
-                    if (!line.trim()) continue;
-                    const addr = line.split(" ")[0];
-                    const match = line.match(/\[(.*?)\]/);
-                    const modelName = match ? match[1] : line.substring(line.indexOf(":") + 1).replace("NVIDIA Corporation", "").trim();
-                    foundItems.push({ "address": addr, "display": addr + ": " + modelName });
-                }
-            }
-            gpuList = foundItems;
-            searching = false;
-            disconnectSource(sourceName);
+        // --- Color Dialogs ---
+        ColorDialog {
+            id: activeColorDialog
+            title: i18n("Pick Active State Color")
+            selectedColor: page.cfg_activeColor
+            onAccepted: page.cfg_activeColor = selectedColor
         }
-    }
-
-    // --- Display Options ---
-    CheckBox {
-        id: showTextInCompact
-        Kirigami.FormData.label: i18n("Display Options:")
-        text: i18n("Show status text in compact mode (panel)")
-    }
-
-    SpinBox {
-        id: updateIntervalSpin
-        Kirigami.FormData.label: i18n("Update Interval (seconds):")
-        from: 1
-        to: 3600
-        stepSize: 1
-        editable: true
-    }
-
-    // --- Process List Options ---
-    Kirigami.Separator {
-        Kirigami.FormData.isSection: true
-        Kirigami.FormData.label: i18n("Process List Options")
-    }
-
-    ComboBox {
-        id: sortFieldCombo
-        Kirigami.FormData.label: i18n("Default Sort By:")
-        textRole: "text"
-        model: [
-            { "text": i18n("GPU Usage (SM %)"), "value": "sm" },
-            { "text": i18n("Memory Usage (%)"), "value": "mem" },
-            { "text": i18n("Process Name"), "value": "name" }
-        ]
-        onActivated: (index) => {
-            page.cfg_sortField = model[index].value;
+        ColorDialog {
+            id: suspendedColorDialog
+            title: i18n("Pick Suspended State Color")
+            selectedColor: page.cfg_suspendedColor
+            onAccepted: page.cfg_suspendedColor = selectedColor
         }
-        Component.onCompleted: {
-            for (let i = 0; i < model.length; i++) {
-                if (model[i].value === page.cfg_sortField) {
-                    currentIndex = i;
-                    break;
+        ColorDialog {
+            id: unknownColorDialog
+            title: i18n("Pick Unknown State Color")
+            selectedColor: page.cfg_unknownColor
+            onAccepted: page.cfg_unknownColor = selectedColor
+        }
+        ColorDialog {
+            id: resumingColorDialog
+            title: i18n("Pick Resuming State Color")
+            selectedColor: page.cfg_resumingColor
+            onAccepted: page.cfg_resumingColor = selectedColor
+        }
+
+        // --- GPU Detection DataSource ---
+        Plasma5Support.DataSource {
+            id: detectionSource
+            engine: "executable"
+            connectedSources: []
+            onNewData: function(sourceName, data) {
+                const output = data["stdout"] ? data["stdout"].trim() : "";
+                const foundItems = [];
+                if (output) {
+                    const lines = output.split(/\n+/);
+                    for (let line of lines) {
+                        if (!line.trim()) continue;
+                        const addr = line.split(" ")[0];
+                        const match = line.match(/\[(.*?)\]/);
+                        const modelName = match ? match[1] : line.substring(line.indexOf(":") + 1).replace("NVIDIA Corporation", "").trim();
+                        foundItems.push({ "address": addr, "display": addr + ": " + modelName });
+                    }
                 }
+                page.gpuList = foundItems;
+                page.searching = false;
+                detectionSource.disconnectSource(sourceName);
             }
         }
-    }
 
-    CheckBox {
-        id: sortDescendingCheckBox
-        Kirigami.FormData.label: i18n("Sort Order:")
-        text: i18n("Sort descending (highest first)")
-    }
-
-    // --- Status Colors ---
-    Kirigami.Separator {
-        Kirigami.FormData.isSection: true
-        Kirigami.FormData.label: i18n("Status Colors")
-    }
-
-    RowLayout {
-        Kirigami.FormData.label: i18n("Active (D0):")
-        spacing: Kirigami.Units.smallSpacing
-
-        Kirigami.Icon {
-            id: activePreview
-            implicitWidth: Kirigami.Units.iconSizes.medium
-            implicitHeight: Kirigami.Units.iconSizes.medium
-            source: Qt.resolvedUrl("../../assets/nvidia-active.svg")
-            isMask: true
-            color: page.cfg_activeColor
-            
-            MouseArea { anchors.fill: parent; onClicked: activeColorDialog.open() }
+        // --- Display Options ---
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Display Options")
         }
-        Label { text: page.cfg_activeColor; opacity: 0.7; font.family: "monospace" }
-    }
 
-    RowLayout {
-        Kirigami.FormData.label: i18n("Suspended (D3cold):")
-        spacing: Kirigami.Units.smallSpacing
-
-        Kirigami.Icon {
-            id: suspendedPreview
-            implicitWidth: Kirigami.Units.iconSizes.medium
-            implicitHeight: Kirigami.Units.iconSizes.medium
-            source: Qt.resolvedUrl("../../assets/nvidia-suspended.svg")
-            isMask: true
-            color: page.cfg_suspendedColor
-            
-            MouseArea { anchors.fill: parent; onClicked: suspendedColorDialog.open() }
+        CheckBox {
+            id: showTextInCompact
+            Kirigami.FormData.label: i18n("Panel Layout:")
+            text: i18n("Show status text in compact mode (panel)")
         }
-        Label { text: page.cfg_suspendedColor; opacity: 0.7; font.family: "monospace" }
-    }
 
-    RowLayout {
-        Kirigami.FormData.label: i18n("Resuming/Suspending:")
-        spacing: Kirigami.Units.smallSpacing
-
-        Kirigami.Icon {
-            id: resumingPreview
-            implicitWidth: Kirigami.Units.iconSizes.medium
-            implicitHeight: Kirigami.Units.iconSizes.medium
-            source: Qt.resolvedUrl("../../assets/nvidia-suspended.svg")
-            isMask: true
-            color: page.cfg_resumingColor
-            
-            MouseArea { anchors.fill: parent; onClicked: resumingColorDialog.open() }
+        SpinBox {
+            id: updateIntervalSpin
+            Kirigami.FormData.label: i18n("Update Interval (seconds):")
+            from: 1
+            to: 3600
+            stepSize: 1
+            editable: true
         }
-        Label { text: page.cfg_resumingColor; opacity: 0.7; font.family: "monospace" }
-    }
 
-    RowLayout {
-        Kirigami.FormData.label: i18n("Unknown:")
-        spacing: Kirigami.Units.smallSpacing
-
-        Kirigami.Icon {
-            id: unknownPreview
-            implicitWidth: Kirigami.Units.iconSizes.medium
-            implicitHeight: Kirigami.Units.iconSizes.medium
-            source: Qt.resolvedUrl("../../assets/nvidia-suspended.svg")
-            isMask: true
-            color: page.cfg_unknownColor
-            
-            MouseArea { anchors.fill: parent; onClicked: unknownColorDialog.open() }
+        // --- Process List Options ---
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Process List & Actions")
         }
-        Label { text: page.cfg_unknownColor; opacity: 0.7; font.family: "monospace" }
-    }
 
-    Button {
-        Kirigami.FormData.label: ""
-        text: i18n("Restore Defaults")
-        icon.name: "edit-undo"
-        onClicked: {
-            page.cfg_activeColor = "#76b900";
-            page.cfg_suspendedColor = "#888888";
-            page.cfg_unknownColor = "#ffaa00";
-            page.cfg_resumingColor = "#3daee9";
+        CheckBox {
+            id: allowProcessTerminationCheckBox
+            Kirigami.FormData.label: i18n("Process Termination:")
+            text: i18n("Allow terminating processes (Terminate / Force Kill)")
         }
-    }
 
-    // --- GPU Selection ---
-    Kirigami.Separator {
-        Kirigami.FormData.isSection: true
-        Kirigami.FormData.label: i18n("GPU Selection")
-    }
-
-    RowLayout {
-        Kirigami.FormData.label: i18n("Detected NVIDIA GPUs:")
-        spacing: Kirigami.Units.smallSpacing
+        CheckBox {
+            id: showProcessIconsCheckBox
+            Kirigami.FormData.label: i18n("Process Icons:")
+            text: i18n("Show application icons in process list")
+        }
 
         ComboBox {
-            id: gpuCombo
-            Layout.fillWidth: true
-            model: page.gpuList
-            textRole: "display"
-            enabled: !page.searching && page.gpuList.length > 0
-
+            id: sortFieldCombo
+            Kirigami.FormData.label: i18n("Default Sort By:")
+            textRole: "text"
+            model: [
+                { "text": i18n("GPU Usage (SM %)"), "value": "sm" },
+                { "text": i18n("Memory Usage (%)"), "value": "mem" },
+                { "text": i18n("Process Name"), "value": "name" }
+            ]
             onActivated: (index) => {
-                if (index >= 0 && index < page.gpuList.length)
-                    pciAddressField.text = page.gpuList[index].address;
+                page.cfg_sortField = model[index].value;
             }
-
             Component.onCompleted: {
-                for (let i = 0; i < page.gpuList.length; i++) {
-                    if (page.gpuList[i].address === pciAddressField.text) {
+                for (let i = 0; i < model.length; i++) {
+                    if (model[i].value === page.cfg_sortField) {
                         currentIndex = i;
                         break;
                     }
@@ -254,41 +167,166 @@ Kirigami.FormLayout {
             }
         }
 
-        BusyIndicator {
-            running: page.searching
-            visible: running
-            implicitWidth: Kirigami.Units.iconSizes.small
-            implicitHeight: Kirigami.Units.iconSizes.small
+        CheckBox {
+            id: sortDescendingCheckBox
+            Kirigami.FormData.label: i18n("Sort Order:")
+            text: i18n("Sort descending (highest first)")
         }
 
-        Label {
-            text: i18n("No GPUs found")
-            visible: !page.searching && page.gpuList.length === 0
-            opacity: 0.6
+        // --- Status Colors ---
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Status Colors")
         }
-    }
 
-    RowLayout {
-        Kirigami.FormData.label: i18n("PCI Address:")
+        RowLayout {
+            Kirigami.FormData.label: i18n("Active (D0):")
+            spacing: Kirigami.Units.smallSpacing
 
-        TextField {
-            id: pciAddressField
-            Layout.fillWidth: true
-            placeholderText: "0000:01:00.0"
+            Kirigami.Icon {
+                id: activePreview
+                implicitWidth: Kirigami.Units.iconSizes.medium
+                implicitHeight: Kirigami.Units.iconSizes.medium
+                source: Qt.resolvedUrl("../../assets/nvidia-active.svg")
+                isMask: true
+                color: page.cfg_activeColor
+                
+                MouseArea { anchors.fill: parent; onClicked: activeColorDialog.open() }
+            }
+            Label { text: page.cfg_activeColor; opacity: 0.7; font.family: "monospace" }
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18n("Suspended (D3cold):")
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.Icon {
+                id: suspendedPreview
+                implicitWidth: Kirigami.Units.iconSizes.medium
+                implicitHeight: Kirigami.Units.iconSizes.medium
+                source: Qt.resolvedUrl("../../assets/nvidia-suspended.svg")
+                isMask: true
+                color: page.cfg_suspendedColor
+                
+                MouseArea { anchors.fill: parent; onClicked: suspendedColorDialog.open() }
+            }
+            Label { text: page.cfg_suspendedColor; opacity: 0.7; font.family: "monospace" }
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18n("Resuming/Suspending:")
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.Icon {
+                id: resumingPreview
+                implicitWidth: Kirigami.Units.iconSizes.medium
+                implicitHeight: Kirigami.Units.iconSizes.medium
+                source: Qt.resolvedUrl("../../assets/nvidia-suspended.svg")
+                isMask: true
+                color: page.cfg_resumingColor
+                
+                MouseArea { anchors.fill: parent; onClicked: resumingColorDialog.open() }
+            }
+            Label { text: page.cfg_resumingColor; opacity: 0.7; font.family: "monospace" }
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18n("Unknown:")
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.Icon {
+                id: unknownPreview
+                implicitWidth: Kirigami.Units.iconSizes.medium
+                implicitHeight: Kirigami.Units.iconSizes.medium
+                source: Qt.resolvedUrl("../../assets/nvidia-suspended.svg")
+                isMask: true
+                color: page.cfg_unknownColor
+                
+                MouseArea { anchors.fill: parent; onClicked: unknownColorDialog.open() }
+            }
+            Label { text: page.cfg_unknownColor; opacity: 0.7; font.family: "monospace" }
         }
 
         Button {
-            icon.name: "view-refresh"
-            text: i18n("Detect")
+            Kirigami.FormData.label: ""
+            text: i18n("Restore Defaults")
+            icon.name: "edit-undo"
             onClicked: {
-                page.searching = true;
-                detectionSource.connectSource("lspci -d 10de:: -D | grep -E 'VGA|3D'")
+                page.cfg_activeColor = "#76b900";
+                page.cfg_suspendedColor = "#888888";
+                page.cfg_unknownColor = "#ffaa00";
+                page.cfg_resumingColor = "#3daee9";
             }
         }
-    }
 
-    Component.onCompleted: {
-        page.searching = true;
-        detectionSource.connectSource("lspci -d 10de:: -D | grep -E 'VGA|3D'")
+        // --- GPU Selection ---
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("GPU Selection")
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18n("Detected NVIDIA GPUs:")
+            spacing: Kirigami.Units.smallSpacing
+
+            ComboBox {
+                id: gpuCombo
+                Layout.fillWidth: true
+                model: page.gpuList
+                textRole: "display"
+                enabled: !page.searching && page.gpuList.length > 0
+
+                onActivated: (index) => {
+                    if (index >= 0 && index < page.gpuList.length)
+                        pciAddressField.text = page.gpuList[index].address;
+                }
+
+                Component.onCompleted: {
+                    for (let i = 0; i < page.gpuList.length; i++) {
+                        if (page.gpuList[i].address === pciAddressField.text) {
+                            currentIndex = i;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            BusyIndicator {
+                running: page.searching
+                visible: running
+                implicitWidth: Kirigami.Units.iconSizes.small
+                implicitHeight: Kirigami.Units.iconSizes.small
+            }
+
+            Label {
+                text: i18n("No GPUs found")
+                visible: !page.searching && page.gpuList.length === 0
+                opacity: 0.6
+            }
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18n("PCI Address:")
+
+            TextField {
+                id: pciAddressField
+                Layout.fillWidth: true
+                placeholderText: "0000:01:00.0"
+            }
+
+            Button {
+                icon.name: "view-refresh"
+                text: i18n("Detect")
+                onClicked: {
+                    page.searching = true;
+                    detectionSource.connectSource("lspci -d 10de:: -D | grep -E 'VGA|3D'")
+                }
+            }
+        }
+
+        Component.onCompleted: {
+            page.searching = true;
+            detectionSource.connectSource("lspci -d 10de:: -D | grep -E 'VGA|3D'")
+        }
     }
 }

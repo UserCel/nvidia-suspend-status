@@ -22,14 +22,31 @@ PlasmoidItem {
     property var lastUpdate: new Date()
     property string sortField: (plasmoid.configuration && plasmoid.configuration.sortField) || "sm"
     property bool sortDescending: plasmoid.configuration && plasmoid.configuration.sortDescending !== undefined ? plasmoid.configuration.sortDescending : true
+    property bool allowProcessTermination: plasmoid.configuration && plasmoid.configuration.allowProcessTermination !== undefined ? plasmoid.configuration.allowProcessTermination : true
+    property bool showProcessIcons: plasmoid.configuration && plasmoid.configuration.showProcessIcons !== undefined ? plasmoid.configuration.showProcessIcons : true
+    property var steamAppMap: ({})
+    property string userHome: ""
+    property double vramUsedMb: 0
+    property double vramTotalMb: 0
+    property int gpuTemp: 0
+    property var gpuPowerDraw: null
+    readonly property double vramPercent: vramTotalMb > 0 ? Math.min(100, Math.max(0, (vramUsedMb / vramTotalMb) * 100)) : 0
     property var processHistory: ({})
     property var rawGpuProcesses: []
     property var gpuProcesses: sortProcesses(rawGpuProcesses, sortField, sortDescending)
     property string nvidiaSmiPath: ""
     property bool hasNvidiaSmi: nvidiaSmiPath !== ""
-    readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath
+    readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath + "; echo \"---TELEMETRY---\"; " + root.nvidiaSmiPath + " --query-gpu=memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits"
     property int idleBackoffCount: 0
     property double lastSmiQueryTime: 0
+
+    function formatVramMb(mb) {
+        if (!mb || isNaN(mb)) return "0 MB";
+        if (mb >= 1024) {
+            return (mb / 1024).toFixed(2) + " GB";
+        }
+        return Math.round(mb) + " MB";
+    }
 
     function isUserProcess(proc) {
         if (!proc) return false;
@@ -40,10 +57,179 @@ PlasmoidItem {
             basename = rawName.substring(lastSlash + 1);
         }
 
-        if (basename === "kwin_wayland" || basename === "xwayland" || basename === "systemd" || basename === "plasmashell" || basename === "kwin") {
+        if (basename === "kwin_wayland" || basename === "xwayland" || basename === "xorg" || basename === "systemd" || basename === "plasmashell" || basename === "kwin") {
             return false;
         }
         return true;
+    }
+
+    function resolveProcessIcon(procName) {
+        if (!procName) return "application-x-executable";
+        const rawName = (procName || "").toLowerCase().trim();
+        let basename = rawName;
+        const lastSlash = Math.max(rawName.lastIndexOf("/"), rawName.lastIndexOf("\\"));
+        if (lastSlash !== -1) {
+            basename = rawName.substring(lastSlash + 1);
+        }
+        if (basename.endsWith(".exe")) {
+            basename = basename.substring(0, basename.length - 4);
+        }
+        if (basename.endsWith(".bin")) {
+            basename = basename.substring(0, basename.length - 4);
+        }
+        if (basename.endsWith("-bin")) {
+            basename = basename.substring(0, basename.length - 4);
+        }
+
+        const iconMap = {
+            "firefox": "org.mozilla.firefox",
+            "chrome": "com.google.Chrome",
+            "google-chrome": "com.google.Chrome",
+            "chromium": "org.chromium.Chromium",
+            "brave": "com.brave.Browser",
+            "edge": "msedge",
+            "steam": "steam",
+            "steamwebhelper": "steam",
+            "blender": "org.blender.Blender",
+            "obs": "com.obsproject.Studio",
+            "obs64": "com.obsproject.Studio",
+            "code": "com.visualstudio.code",
+            "vscodium": "com.vscodium.codium",
+            "discord": "com.discordapp.Discord",
+            "spotify": "com.spotify.Client",
+            "vlc": "org.videolan.VLC",
+            "mpv": "io.mpv.Mpv",
+            "gimp": "org.gimp.GIMP",
+            "inkscape": "org.inkscape.Inkscape",
+            "kwin_wayland": "kwin",
+            "plasmashell": "plasma",
+            "xwayland": "xorg",
+            "xorg": "xorg",
+            "alacritty": "alacritty",
+            "kitty": "kitty",
+            "konsole": "utilities-terminal",
+            "heroic": "com.heroicgameslauncher.hgl",
+            "lutris": "net.lutris.Lutris",
+            "dolphin": "system-file-manager",
+            "glxgears": "utilities-system-monitor",
+            "vkmark": "utilities-system-monitor",
+            "furmark": "preferences-system-performance",
+            "gputest": "preferences-system-performance",
+            "nvtop": "utilities-terminal",
+            "htop": "utilities-terminal",
+            "btop": "utilities-terminal"
+        };
+
+        if (iconMap[basename]) {
+            return iconMap[basename];
+        }
+
+        const clean = basename.replace(/[^a-z0-9]/g, "");
+
+        // 1. Check if direct extracted .exe icon exists in cache for Windows binaries
+        if (rawName.endsWith(".exe") && root.userHome) {
+            const cachePath = "file://" + root.userHome + "/.cache/nvidia_status_applet_icons/" + clean + ".png";
+            return cachePath;
+        }
+
+        // 2. Check Steam appmanifest librarycache logo
+        if (root.steamAppMap && root.steamAppMap[clean]) {
+            const appId = root.steamAppMap[clean];
+            if (root.userHome) {
+                return "file://" + root.userHome + "/.local/share/Steam/appcache/librarycache/" + appId + "/logo.png";
+            }
+        }
+
+        return basename;
+    }
+
+    function extractExeIcon(procName) {
+        if (!procName || !root.showProcessIcons) return;
+        const rawName = (procName || "").trim();
+        if (!rawName.toLowerCase().endsWith(".exe")) return;
+        
+        let basename = rawName;
+        const lastSlash = Math.max(rawName.lastIndexOf("/"), rawName.lastIndexOf("\\"));
+        if (lastSlash !== -1) {
+            basename = rawName.substring(lastSlash + 1);
+        }
+        const cleanName = basename.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (!cleanName || !root.userHome) return;
+
+        const iconPath = root.userHome + "/.cache/nvidia_status_applet_icons/" + cleanName + ".png";
+        
+        const cmd = "mkdir -p ~/.cache/nvidia_status_applet_icons && [ ! -f \"" + iconPath + "\" ] && " +
+            "exePath=$(ps aux | grep -i \"" + basename + "\" | grep -o \"/.*" + basename + "\" | awk -F'waitforexitandrun ' '{print $NF}' | tail -n 1) && " +
+            "[ -f \"$exePath\" ] && wrestool -x -t14 \"$exePath\" > /tmp/tmp_icon_" + cleanName + ".ico 2>/dev/null && " +
+            "icotool -x -o /tmp/ /tmp/tmp_icon_" + cleanName + ".ico 2>/dev/null && " +
+            "highestPng=$(ls -S /tmp/tmp_icon_" + cleanName + "*.png /tmp/*_*.png 2>/dev/null | head -n 1) && " +
+            "[ -f \"$highestPng\" ] && cp \"$highestPng\" \"" + iconPath + "\" 2>/dev/null; " +
+            "rm -f /tmp/tmp_icon_" + cleanName + "* /tmp/*_*.png 2>/dev/null";
+
+        exeIconExtractorSource.disconnectSource(cmd);
+        exeIconExtractorSource.connectSource(cmd);
+    }
+
+    function resolveProcessFallbackIcon(procName) {
+        if (!procName) return "application-x-executable";
+        const rawName = (procName || "").toLowerCase().trim();
+        let basename = rawName;
+        const lastSlash = Math.max(rawName.lastIndexOf("/"), rawName.lastIndexOf("\\"));
+        if (lastSlash !== -1) {
+            basename = rawName.substring(lastSlash + 1);
+        }
+        if (basename.endsWith(".exe")) {
+            basename = basename.substring(0, basename.length - 4);
+        }
+        if (basename.endsWith(".bin")) {
+            basename = basename.substring(0, basename.length - 4);
+        }
+        if (basename.endsWith("-bin")) {
+            basename = basename.substring(0, basename.length - 4);
+        }
+
+        const clean = basename.replace(/[^a-z0-9]/g, "");
+        if (root.steamAppMap && root.steamAppMap[clean]) {
+            const appId = root.steamAppMap[clean];
+            return "steam_icon_" + appId;
+        }
+
+        const fallbackMap = {
+            "vlc": "vlc",
+            "firefox": "firefox",
+            "chrome": "google-chrome",
+            "google-chrome": "google-chrome",
+            "chromium": "chromium",
+            "brave": "brave-browser",
+            "obs": "obs",
+            "obs64": "obs",
+            "code": "vscode",
+            "vscodium": "vscodium",
+            "discord": "discord",
+            "spotify": "spotify",
+            "gimp": "gimp",
+            "inkscape": "inkscape",
+            "blender": "blender"
+        };
+
+        if (fallbackMap[basename]) {
+            return fallbackMap[basename];
+        }
+
+        if (rawName.endsWith(".exe") || basename === "gamescope" || basename.startsWith("proton")) {
+            return "steam";
+        }
+        if (basename.startsWith("wine")) {
+            return "wine";
+        }
+        return "application-x-executable";
+    }
+
+    function killProcess(pid, force) {
+        if (!pid) return;
+        const cmd = force ? ("kill -9 " + pid) : ("kill " + pid);
+        processActionSource.disconnectSource(cmd);
+        processActionSource.connectSource(cmd);
     }
 
     function parseVramInMb(memStr) {
@@ -186,7 +372,7 @@ PlasmoidItem {
             anchors.margins: Kirigami.Units.largeSpacing
             spacing: Kirigami.Units.largeSpacing
 
-            // Dynamic Status Card
+            // Dynamic Status Card & Telemetry
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.largeSpacing
@@ -202,9 +388,82 @@ PlasmoidItem {
                 }
 
                 ColumnLayout {
-                    spacing: 0
-                    PlasmaComponents3.Label { text: root.statusText; color: root.statusColor; font.bold: true; font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2 }
-                    PlasmaComponents3.Label { opacity: 0.6; font.pointSize: Kirigami.Theme.smallFont.pointSize; text: i18n("Updates every %1s", plasmoid.configuration.updateInterval) }
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing / 2
+
+                    RowLayout {
+                        spacing: Kirigami.Units.largeSpacing
+                        PlasmaComponents3.Label {
+                            text: root.statusText
+                            color: root.statusColor
+                            font.bold: true
+                            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
+                        }
+
+                        // Telemetry Badges (Temp & Power)
+                        RowLayout {
+                            visible: root.status === "active" && root.gpuTemp > 0
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Rectangle {
+                                implicitWidth: tempLabel.implicitWidth + Kirigami.Units.smallSpacing
+                                implicitHeight: tempLabel.implicitHeight + Kirigami.Units.smallSpacing / 4
+                                radius: 4
+                                color: Kirigami.Theme.highlightColor
+                                opacity: 0.15
+                            }
+                            PlasmaComponents3.Label {
+                                id: tempLabel
+                                text: "🌡️ " + root.gpuTemp + "°C"
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                font.bold: true
+                            }
+
+                            PlasmaComponents3.Label {
+                                text: "⚡ " + root.gpuPowerDraw + " W"
+                                visible: root.gpuPowerDraw !== null
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                font.bold: true
+                                opacity: 0.85
+                            }
+                        }
+                    }
+
+                    PlasmaComponents3.Label {
+                        opacity: 0.6
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        text: i18n("Updates every %1s", plasmoid.configuration.updateInterval)
+                    }
+                }
+            }
+
+            // Total VRAM Usage Bar (Active State)
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: root.status === "active" && root.vramTotalMb > 0
+                spacing: Kirigami.Units.smallSpacing / 2
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    PlasmaComponents3.Label {
+                        text: i18n("VRAM Allocation")
+                        font.bold: true
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        opacity: 0.8
+                    }
+                    Item { Layout.fillWidth: true }
+                    PlasmaComponents3.Label {
+                        text: root.formatVramMb(root.vramUsedMb) + " / " + root.formatVramMb(root.vramTotalMb) + " (" + root.vramPercent.toFixed(1) + "%)"
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font.bold: true
+                    }
+                }
+
+                PlasmaComponents3.ProgressBar {
+                    Layout.fillWidth: true
+                    from: 0
+                    to: 100
+                    value: root.vramPercent
                 }
             }
 
@@ -223,7 +482,8 @@ PlasmoidItem {
                     height: Kirigami.Units.gridUnit * 1.5
                     visible: root.gpuProcesses.length > 0
                     
-                    readonly property int colWidth: Kirigami.Units.gridUnit * 5
+                    readonly property int colWidth: Kirigami.Units.gridUnit * 4.5
+                    readonly property int actionWidth: Kirigami.Units.iconSizes.medium
                     readonly property int margin: Kirigami.Units.largeSpacing
 
                     function getSortIndicator(field) {
@@ -237,7 +497,7 @@ PlasmoidItem {
                         width: parent.colWidth
                         height: parent.height
                         anchors.right: parent.right
-                        anchors.rightMargin: parent.margin
+                        anchors.rightMargin: root.allowProcessTermination ? (parent.margin + parent.actionWidth + parent.margin) : parent.margin
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
@@ -324,13 +584,80 @@ PlasmoidItem {
                 visible: root.hasNvidiaSmi && root.status === "active" && root.gpuProcesses.length > 0
                 
                 delegate: PlasmaComponents3.ItemDelegate {
+                    id: delegateRoot
                     width: processList.width
                     height: Kirigami.Units.gridUnit * 2.5
                     
-                    readonly property int colWidth: Kirigami.Units.gridUnit * 5
+                    readonly property int colWidth: Kirigami.Units.gridUnit * 4.5
                     readonly property int margin: Kirigami.Units.largeSpacing
 
                     contentItem: Item {
+                        Item {
+                            id: killBtnContainer
+                            anchors.right: parent.right
+                            anchors.rightMargin: parent.parent.margin
+                            anchors.verticalCenter: parent.verticalCenter
+                            implicitWidth: Kirigami.Units.iconSizes.medium
+                            implicitHeight: Kirigami.Units.iconSizes.medium
+                            visible: root.allowProcessTermination
+
+                            readonly property bool isUserProc: root.isUserProcess(modelData)
+
+                            // For user processes: a real interactive ToolButton
+                            PlasmaComponents3.ToolButton {
+                                id: killBtn
+                                anchors.fill: parent
+                                icon.name: "process-stop-symbolic"
+                                display: PlasmaComponents3.ToolButton.IconOnly
+                                visible: killBtnContainer.isUserProc
+
+                                PlasmaComponents3.ToolTip.text: i18n("Terminate or Force Kill %1 (PID: %2)", modelData.name, modelData.pid)
+
+                                onClicked: processMenu.open()
+
+                                PlasmaComponents3.Menu {
+                                    id: processMenu
+
+                                    PlasmaComponents3.MenuItem {
+                                        text: i18n("Terminate (SIGTERM)")
+                                        icon.name: "process-stop-symbolic"
+                                        onTriggered: root.killProcess(modelData.pid, false)
+                                    }
+
+                                    PlasmaComponents3.MenuItem {
+                                        text: i18n("Force Kill (SIGKILL)")
+                                        icon.name: "edit-delete-symbolic"
+                                        onTriggered: root.killProcess(modelData.pid, true)
+                                    }
+                                }
+                            }
+
+                            // For system processes: a static icon + hover area for tooltip
+                            Item {
+                                anchors.fill: parent
+                                visible: !killBtnContainer.isUserProc
+
+                                Kirigami.Icon {
+                                    id: sysKillIcon
+                                    anchors.centerIn: parent
+                                    implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                                    implicitHeight: Kirigami.Units.iconSizes.smallMedium
+                                    source: "process-stop-symbolic"
+                                    isMask: true
+                                    color: Kirigami.Theme.disabledTextColor
+                                }
+
+                                HoverHandler {
+                                    id: sysKillHover
+                                }
+
+                                PlasmaComponents3.ToolTip {
+                                    visible: sysKillHover.hovered
+                                    text: i18n("System process (%1) cannot be terminated", modelData.name)
+                                }
+                            }
+                        }
+
                         PlasmaComponents3.Label { 
                             id: dataMem
                             text: {
@@ -339,7 +666,7 @@ PlasmoidItem {
                                 return m + "%";
                             }
                             width: parent.parent.colWidth
-                            anchors.right: parent.right
+                            anchors.right: root.allowProcessTermination ? killBtnContainer.left : parent.right
                             anchors.rightMargin: parent.parent.margin
                             anchors.verticalCenter: parent.verticalCenter
                             horizontalAlignment: Text.AlignHCenter 
@@ -355,24 +682,38 @@ PlasmoidItem {
                             horizontalAlignment: Text.AlignHCenter 
                             color: parseFloat(modelData.sm) > 0 ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor 
                         }
-                        ColumnLayout {
-                            spacing: 0
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
                             anchors.left: parent.left
                             anchors.leftMargin: parent.parent.margin
                             anchors.right: dataGpu.left
                             anchors.rightMargin: parent.parent.margin
                             anchors.verticalCenter: parent.verticalCenter
-                            PlasmaComponents3.Label { 
-                                text: modelData.name
-                                font.bold: true
-                                Layout.fillWidth: true
-                                elide: Text.ElideRight 
+
+                            Kirigami.Icon {
+                                visible: root.showProcessIcons
+                                implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                                implicitHeight: Kirigami.Units.iconSizes.smallMedium
+                                source: root.resolveProcessIcon(modelData.name)
+                                fallback: root.resolveProcessFallbackIcon(modelData.name)
+                                Layout.alignment: Qt.AlignVCenter
                             }
-                            PlasmaComponents3.Label { 
-                                text: "PID: " + modelData.pid + " • " + modelData.type
-                                opacity: 0.6
-                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+
+                            ColumnLayout {
                                 Layout.fillWidth: true
+                                spacing: 0
+                                PlasmaComponents3.Label { 
+                                    text: modelData.name
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight 
+                                }
+                                PlasmaComponents3.Label { 
+                                    text: "PID: " + modelData.pid + " • " + modelData.type
+                                    opacity: 0.6
+                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                    Layout.fillWidth: true
+                                }
                             }
                         }
                     }
@@ -402,6 +743,20 @@ PlasmoidItem {
 
     // --- Data Source ---
     Plasma5Support.DataSource {
+        id: processActionSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            if (root.isViewActive && root.status === "active" && root.hasNvidiaSmi) {
+                root.idleBackoffCount = 0;
+                gpuProcessesSource.disconnectSource(root.getProcessCmd);
+                gpuProcessesSource.connectSource(root.getProcessCmd);
+            }
+        }
+    }
+
+    Plasma5Support.DataSource {
         id: gpuStatusSource
         engine: "executable"
         connectedSources: []
@@ -415,6 +770,10 @@ PlasmoidItem {
                 root.statusText = i18n("Suspended (D3cold)");
                 root.processHistory = {};
                 root.rawGpuProcesses = []; // Clear processes when suspended
+                root.vramUsedMb = 0;
+                root.vramTotalMb = 0;
+                root.gpuTemp = 0;
+                root.gpuPowerDraw = null;
                 root.idleBackoffCount = 0;
             } else if (result === "active") {
                 root.statusText = i18n("Active (D0)");
@@ -442,9 +801,33 @@ PlasmoidItem {
                     root.nvidiaSmiPath = discoveredPath;
                 }
             } else {
-                const partsOut = stdout.split("---PROCESSES---");
-                const pmonOut = partsOut[0] || "";
-                const smiOut = partsOut[1] || "";
+                const partsOut = stdout.split("---TELEMETRY---");
+                const mainOut = partsOut[0] || "";
+                const telemetryOut = (partsOut[1] || "").trim();
+
+                if (telemetryOut) {
+                    const tFields = telemetryOut.split(",");
+                    if (tFields.length >= 3) {
+                        const usedMb = parseFloat(tFields[0].trim()) || 0;
+                        const totalMb = parseFloat(tFields[1].trim()) || 0;
+                        const tempC = parseInt(tFields[2].trim()) || 0;
+                        let powerW = null;
+                        if (tFields.length >= 4) {
+                            const rawPwr = tFields[3].trim();
+                            if (rawPwr && rawPwr !== "[N/A]" && !isNaN(parseFloat(rawPwr))) {
+                                powerW = Math.round(parseFloat(rawPwr) * 10) / 10;
+                            }
+                        }
+                        root.vramUsedMb = usedMb;
+                        root.vramTotalMb = totalMb;
+                        root.gpuTemp = tempC;
+                        root.gpuPowerDraw = powerW;
+                    }
+                }
+
+                const procParts = mainOut.split("---PROCESSES---");
+                const pmonOut = procParts[0] || "";
+                const smiOut = procParts[1] || "";
 
                 // 1. Parse pmon data
                 const pmonMap = {};
@@ -572,6 +955,7 @@ PlasmoidItem {
                 for (let i = 0; i < finalProcesses.length; i++) {
                     if (root.isUserProcess(finalProcesses[i])) {
                         userProcCount++;
+                        root.extractExeIcon(finalProcesses[i].name);
                     }
                 }
 
@@ -588,9 +972,60 @@ PlasmoidItem {
         }
     }
 
+    Plasma5Support.DataSource {
+        id: exeIconExtractorSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            // Trigger process array reference refresh so Kirigami.Icon re-evaluates file:// image source
+            root.rawGpuProcesses = root.rawGpuProcesses;
+        }
+    }
+
+    Plasma5Support.DataSource {
+        id: steamAppsSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            const stdout = data["stdout"] || "";
+            const lines = stdout.split("\n");
+            const map = {};
+            let currentAppId = "";
+            let currentName = "";
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line.startsWith("HOME=")) {
+                    root.userHome = line.substring(5).trim();
+                } else if (line.startsWith('"appid"')) {
+                    const parts = line.split('"');
+                    if (parts.length >= 4) currentAppId = parts[3];
+                } else if (line.startsWith('"name"')) {
+                    const parts = line.split('"');
+                    if (parts.length >= 4) currentName = parts[3];
+                } else if (line.startsWith('"installdir"')) {
+                    const parts = line.split('"');
+                    if (parts.length >= 4) {
+                        const installDir = parts[3];
+                        if (currentAppId) {
+                            const cName = currentName.toLowerCase().replace(/[^a-z0-9]/g, "");
+                            const cDir = installDir.toLowerCase().replace(/[^a-z0-9]/g, "");
+                            if (cName) map[cName] = currentAppId;
+                            if (cDir) map[cDir] = currentAppId;
+                        }
+                    }
+                }
+            }
+            root.steamAppMap = map;
+            disconnectSource(sourceName);
+        }
+    }
+
     Component.onCompleted: {
         // Search in common system paths, user path, and then system-wide which
         gpuProcessesSource.connectSource("for p in /usr/bin/nvidia-smi /usr/local/bin/nvidia-smi ~/.local/bin/nvidia-smi; do [ -x \"$p\" ] && echo \"$p\" && exit 0; done; which nvidia-smi");
+        steamAppsSource.connectSource("echo \"HOME=$HOME\"; grep -hE '\"appid\"|\"name\"|\"installdir\"' ~/.local/share/Steam/steamapps/appmanifest_*.acf ~/.steam/root/steamapps/appmanifest_*.acf ~/.steam/steam/steamapps/appmanifest_*.acf 2>/dev/null");
     }
 
     // Refresh processes when expanded
