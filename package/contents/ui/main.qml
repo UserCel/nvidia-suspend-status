@@ -37,7 +37,11 @@ PlasmoidItem {
     property string nvidiaSmiPath: ""
     property bool hasNvidiaSmi: nvidiaSmiPath !== ""
     readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath + "; echo \"---TELEMETRY---\"; " + root.nvidiaSmiPath + " --query-gpu=memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits"
-    property int idleBackoffCount: 0
+    readonly property string fuserCmd: "fuser /dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset 2>/dev/null"
+    property bool isBackingOff: false
+    property var baselineFuserPids: []
+    property int idleCooldownTicks: 0
+    readonly property int maxCooldownTicks: 3
     property double lastSmiQueryTime: 0
 
     function formatVramMb(mb) {
@@ -749,7 +753,9 @@ PlasmoidItem {
         onNewData: function(sourceName, data) {
             disconnectSource(sourceName);
             if (root.isViewActive && root.status === "active" && root.hasNvidiaSmi) {
-                root.idleBackoffCount = 0;
+                root.isBackingOff = false;
+                root.idleCooldownTicks = 0;
+                root.baselineFuserPids = [];
                 gpuProcessesSource.disconnectSource(root.getProcessCmd);
                 gpuProcessesSource.connectSource(root.getProcessCmd);
             }
@@ -774,7 +780,9 @@ PlasmoidItem {
                 root.vramTotalMb = 0;
                 root.gpuTemp = 0;
                 root.gpuPowerDraw = null;
-                root.idleBackoffCount = 0;
+                root.isBackingOff = false;
+                root.idleCooldownTicks = 0;
+                root.baselineFuserPids = [];
             } else if (result === "active") {
                 root.statusText = i18n("Active (D0)");
             } else if (result === "resuming") {
@@ -960,9 +968,14 @@ PlasmoidItem {
                 }
 
                 if (userProcCount === 0) {
-                    root.idleBackoffCount = 1;
+                    root.isBackingOff = true;
+                    root.idleCooldownTicks = 0;
+                    fuserBaselineSnapshotSource.disconnectSource(root.fuserCmd);
+                    fuserBaselineSnapshotSource.connectSource(root.fuserCmd);
                 } else {
-                    root.idleBackoffCount = 0;
+                    root.isBackingOff = false;
+                    root.idleCooldownTicks = 0;
+                    root.baselineFuserPids = [];
                 }
 
                 root.processHistory = newHistory;
@@ -1028,10 +1041,66 @@ PlasmoidItem {
         steamAppsSource.connectSource("echo \"HOME=$HOME\"; grep -hE '\"appid\"|\"name\"|\"installdir\"' ~/.local/share/Steam/steamapps/appmanifest_*.acf ~/.steam/root/steamapps/appmanifest_*.acf ~/.steam/steam/steamapps/appmanifest_*.acf 2>/dev/null");
     }
 
+    Plasma5Support.DataSource {
+        id: fuserBaselineSnapshotSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            const stdout = (data["stdout"] || "").trim();
+            root.baselineFuserPids = stdout ? stdout.split(/\s+/).filter(Boolean) : [];
+        }
+    }
+
+    Plasma5Support.DataSource {
+        id: fuserSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            const stdout = (data["stdout"] || "").trim();
+            const currentPids = stdout ? stdout.split(/\s+/).filter(Boolean) : [];
+
+            let hasNewPid = false;
+            for (let i = 0; i < currentPids.length; i++) {
+                if (root.baselineFuserPids.indexOf(currentPids[i]) === -1) {
+                    hasNewPid = true;
+                    break;
+                }
+            }
+
+            if (hasNewPid) {
+                // A new process opened the dGPU! Immediately exit backoff and trigger nvidia-smi
+                root.isBackingOff = false;
+                root.idleCooldownTicks = 0;
+                root.baselineFuserPids = [];
+                if (root.isViewActive && root.status === "active" && root.hasNvidiaSmi) {
+                    gpuProcessesSource.disconnectSource(root.getProcessCmd);
+                    gpuProcessesSource.connectSource(root.getProcessCmd);
+                }
+            } else {
+                root.idleCooldownTicks++;
+                if (root.idleCooldownTicks >= root.maxCooldownTicks) {
+                    // Grace window completed: GPU is still active (e.g. external display / desktop GPU)
+                    // Resume regular nvidia-smi polling!
+                    root.isBackingOff = false;
+                    root.idleCooldownTicks = 0;
+                    root.baselineFuserPids = [];
+                    if (root.isViewActive && root.status === "active" && root.hasNvidiaSmi) {
+                        gpuProcessesSource.disconnectSource(root.getProcessCmd);
+                        gpuProcessesSource.connectSource(root.getProcessCmd);
+                    }
+                }
+            }
+        }
+    }
+
     // Refresh processes when expanded
     onExpandedChanged: (expanded) => {
         if (expanded && root.status === "active" && root.hasNvidiaSmi) {
-            root.idleBackoffCount = 0;
+            root.isBackingOff = false;
+            root.idleCooldownTicks = 0;
+            root.baselineFuserPids = [];
             root.lastSmiQueryTime = Date.now();
             gpuProcessesSource.disconnectSource(root.getProcessCmd);
             gpuProcessesSource.connectSource(root.getProcessCmd);
@@ -1049,10 +1118,13 @@ PlasmoidItem {
             gpuStatusSource.disconnectSource("cat /sys/bus/pci/devices/" + addr + "/power/runtime_status");
             gpuStatusSource.connectSource("cat /sys/bus/pci/devices/" + addr + "/power/runtime_status");
             
-            // Only query processes if view is active (expanded popup or desktop widget) AND gpu is active AND tool was found AND user processes exist (idleBackoffCount < 1)
-            // This is the "No-Wake" Guardian: stops nvidia-smi to allow Linux PCI runtime PM to auto-suspend the GPU
+            // Only query processes if view is active (expanded popup or desktop widget) AND gpu is active AND tool was found
             if (root.isViewActive && root.status === "active" && root.hasNvidiaSmi) {
-                if (root.idleBackoffCount < 1) {
+                if (root.isBackingOff) {
+                    // Passively monitor fuser without waking or resetting autosuspend timer
+                    fuserSource.disconnectSource(root.fuserCmd);
+                    fuserSource.connectSource(root.fuserCmd);
+                } else {
                     gpuProcessesSource.disconnectSource(root.getProcessCmd);
                     gpuProcessesSource.connectSource(root.getProcessCmd);
                 }
