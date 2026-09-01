@@ -33,7 +33,7 @@ jobs:
           files: ${{ steps.metadata.outputs.FILENAME }}
           name: Release ${{ github.ref_name }}
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: |
             Automated release for version ${{ steps.metadata.outputs.VERSION }}.
             
@@ -41,7 +41,8 @@ jobs:
             1. Download the `.plasmoid` file below.
             2. Install using:
                ```bash
-               kpackagetool6 -t Plasma/Applet -i ${{ steps.metadata.outputs.FILENAME }}
+               kpackagetool6 -t Plasma/Applet -u ${{ steps.metadata.outputs.FILENAME }}
+               systemctl --user restart plasma-plasmashell
                ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

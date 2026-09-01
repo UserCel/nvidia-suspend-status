@@ -45,7 +45,12 @@ PlasmoidItem {
         return addr ? " -i " + addr : "";
     }
     readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1" + root.smiTarget + "; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath + root.smiTarget + "; echo \"---TELEMETRY---\"; " + root.nvidiaSmiPath + root.smiTarget + " --query-gpu=memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits"
-    readonly property string fuserCmd: "fuser /dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset 2>/dev/null"
+readonly property string configuredPciAddress: (plasmoid.configuration && plasmoid.configuration.pciAddress) ? String(plasmoid.configuration.pciAddress).trim() : "0000:01:00.0"
+    readonly property string shortPciAddress: {
+        const addr = root.configuredPciAddress;
+        return addr.replace(/^0000:/, "");
+    }
+    readonly property string fuserCmd: "dev=\"/dev/nvidia$(grep -s 'Device Minor:' /proc/driver/nvidia/gpus/" + root.configuredPciAddress + "/information 2>/dev/null | awk '{print $NF}')\"; [ -e \"$dev\" ] || dev=\"/dev/nvidia0\"; fuser \"$dev\" /dev/nvidiactl /dev/nvidia-modeset 2>/dev/null"
     property bool isBackingOff: false
     property var baselineFuserPids: []
     property int idleCooldownTicks: 0
@@ -290,7 +295,7 @@ PlasmoidItem {
     }
 
     // --- Tooltip ---
-    toolTipMainText: i18n("NVIDIA GPU Status")
+    toolTipMainText: i18n("NVIDIA GPU Status (%1)", root.shortPciAddress)
     toolTipSubText: i18n("Current State: %1", statusText)
 
     // --- Desktop / Panel Representation Helper ---
@@ -441,10 +446,19 @@ PlasmoidItem {
                         }
                     }
 
-                    PlasmaComponents3.Label {
-                        opacity: 0.6
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                        text: i18n("Updates every %1s", plasmoid.configuration.updateInterval)
+                    RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+                        PlasmaComponents3.Label {
+                            opacity: 0.8
+                            font.bold: true
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            text: "GPU (" + root.shortPciAddress + ")"
+                        }
+                        PlasmaComponents3.Label {
+                            opacity: 0.5
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            text: "• " + i18n("Updates every %1s", plasmoid.configuration.updateInterval)
+                        }
                     }
                 }
             }
