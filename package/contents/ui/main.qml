@@ -36,7 +36,15 @@ PlasmoidItem {
     property var gpuProcesses: sortProcesses(rawGpuProcesses, sortField, sortDescending)
     property string nvidiaSmiPath: ""
     property bool hasNvidiaSmi: nvidiaSmiPath !== ""
-    readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath + "; echo \"---TELEMETRY---\"; " + root.nvidiaSmiPath + " --query-gpu=memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits"
+    // Scope every nvidia-smi call to the configured card, so that on a multi-GPU
+    // system each instance of the widget reports its own GPU instead of the
+    // aggregate of all of them. nvidia-smi takes the PCI bus id in -i directly.
+    // Note: for pmon the flag must come after the subcommand.
+    readonly property string smiTarget: {
+        const addr = (plasmoid.configuration && plasmoid.configuration.pciAddress) ? String(plasmoid.configuration.pciAddress).trim() : "";
+        return addr ? " -i " + addr : "";
+    }
+    readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1" + root.smiTarget + "; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath + root.smiTarget + "; echo \"---TELEMETRY---\"; " + root.nvidiaSmiPath + root.smiTarget + " --query-gpu=memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits"
     readonly property string fuserCmd: "fuser /dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset 2>/dev/null"
     property bool isBackingOff: false
     property var baselineFuserPids: []
