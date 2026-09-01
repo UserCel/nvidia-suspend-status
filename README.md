@@ -2,17 +2,19 @@
 <img src="screenshot.png" width="500" alt="NVIDIA Status Screenshot">
 <img src="screenshot2.png" width="250" alt="NVIDIA Status Screenshot 2">
 
-KDE Plasma 6 widget for monitoring NVIDIA GPU power state (`Suspended / D3cold` vs `Active / D0`) and active processes.
+KDE Plasma 6 widget for monitoring NVIDIA GPU power state (`Suspended / D3cold` vs `Active / D0`), hardware telemetry, and active processes.
 
 ## Features
 - **GPU Status Monitor**: Real-time monitoring of `Suspended (D3cold)` and `Active (D0)` power states via sysfs.
+- **Multi-GPU Support**: Configurable per-instance PCI address binding to independently monitor multiple NVIDIA cards on the same system.
+- **GPU Model Detection**: Automatically detects and displays your clean GPU model name (e.g. `RTX 4060`, `RTX 5060 Ti`) with a toggle in settings.
 - **Process Tracking**: Lists applications using the dGPU with GPU utilization (%) and VRAM memory consumption.
+- **Process Icon Resolution**: Automatically resolves desktop icons for apps, games, tools, and system processes running on the dGPU (Flatpaks, native packages, and direct `.exe` icon extraction for Proton/Wine games).
 - **Flexible Display Modes**: Use as a compact panel applet or place directly on your desktop / secondary monitor as a floating widget.
-- **Configurable Process Sorting**: Sort processes by GPU Usage (SM %), VRAM allocation, or Process Name with ascending/descending toggles.
-- **Smart Power Guardian**: Automatically pauses polling when user applications close, allowing the dGPU to enter `D3cold` sleep state even while keeping the process list view open. Filters out background desktop compositor tasks (`kwin_wayland`, `plasmashell`).
 - **GPU Telemetry & VRAM Meter**: Visual progress bar for total dGPU VRAM allocation along with live temperature (°C) and power draw (Watts) telemetry.
 - **Process Management**: Directly terminate (`SIGTERM`) or force kill (`SIGKILL`) user applications keeping the dGPU awake (with safe protection for system processes like `kwin_wayland` and a settings toggle to enable/disable).
-- **Process Icon Resolution**: Automatically resolves desktop icons for apps, games, tools, and system processes running on the dGPU (configurable in settings).
+- **Smart Power Guardian**: Automatically pauses polling when user applications close, allowing the dGPU to enter `D3cold` sleep state even while keeping the process list view open. Filters out background desktop compositor tasks (`kwin_wayland`, `plasmashell`).
+- **Configurable Process Sorting**: Sort processes by GPU Usage (SM %), VRAM allocation, or Process Name with ascending/descending toggles.
 - **Proton / DXVK Support**: Accurately tracks GPU percentage for Vulkan and Direct3D games.
 - **Dynamic Discovery**: Automatically detects `nvidia-smi` across system and user binary paths.
 - **Persistent Header**: Optional pinning to keep popups open and shortcut to settings.
@@ -20,7 +22,7 @@ KDE Plasma 6 widget for monitoring NVIDIA GPU power state (`Suspended / D3cold` 
 ## Requirements
 - KDE Plasma 6
 - NVIDIA Proprietary Driver
-- `nvidia-smi` (optional — for process list)
+- `nvidia-smi` (optional — for process list & telemetry)
 
 ## Installation
 
@@ -44,12 +46,14 @@ Alternatively, view or download it directly from the [KDE Store](https://store.k
    *To update an existing installation:*
    ```bash
    kpackagetool6 -t Plasma/Applet -u package/
+   systemctl --user restart plasma-plasmashell
    ```
 
 ## Configuration
-- **PCI Address**: Automatically detected, but can be manually set if necessary.
+- **PCI Address**: Automatically detected, with support for multi-GPU setups.
+- **GPU Model Display**: Toggle display of the GPU model name in header and tooltip.
 - **Polling Interval**: Adjustable from settings (default: 3 seconds).
-- **Appearance**: Customizable colors for different power states and toggleable panel text.
+- **Appearance & Toggles**: Customizable colors for different power states, toggleable panel text, process termination toggle, and process icons toggle.
 - **Process Sorting**: Click list column headers to sort by Process Name, GPU %, or VRAM.
 
 ## License
