@@ -41,13 +41,13 @@ PlasmoidItem {
     // aggregate of all of them. nvidia-smi takes the PCI bus id in -i directly.
     // Note: for pmon the flag must come after the subcommand.
     readonly property string smiTarget: {
-        const addr = (plasmoid.configuration && plasmoid.configuration.pciAddress) ? String(plasmoid.configuration.pciAddress).trim() : "";
+        const addr = root.configuredPciAddress;
         return addr ? " -i " + addr : "";
     }
     readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1" + root.smiTarget + "; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath + root.smiTarget + "; echo \"---TELEMETRY---\"; " + root.nvidiaSmiPath + root.smiTarget + " --query-gpu=memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits"
     property bool showGpuModel: plasmoid.configuration && plasmoid.configuration.showGpuModel !== undefined ? plasmoid.configuration.showGpuModel : true
     property string gpuModelName: ""
-    readonly property string configuredPciAddress: (plasmoid.configuration && plasmoid.configuration.pciAddress) ? String(plasmoid.configuration.pciAddress).trim() : "0000:01:00.0"
+    readonly property string configuredPciAddress: (plasmoid.configuration && plasmoid.configuration.pciAddress) ? String(plasmoid.configuration.pciAddress).trim().toLowerCase() : "0000:01:00.0"
     readonly property string shortPciAddress: {
         const addr = root.configuredPciAddress;
         return addr.replace(/^0000:/, "");
@@ -1166,7 +1166,7 @@ PlasmoidItem {
         repeat: true
         triggeredOnStart: true
         onTriggered: {
-            const addr = plasmoid.configuration.pciAddress || "0000:01:00.0";
+            const addr = root.configuredPciAddress;
             gpuStatusSource.disconnectSource("cat /sys/bus/pci/devices/" + addr + "/power/runtime_status");
             gpuStatusSource.connectSource("cat /sys/bus/pci/devices/" + addr + "/power/runtime_status");
             
