@@ -14,6 +14,7 @@ ScrollView {
     property alias cfg_showTextInCompact: page.cfg_showTextInCompact
     property alias cfg_allowProcessTermination: page.cfg_allowProcessTermination
     property alias cfg_showProcessIcons: page.cfg_showProcessIcons
+    property alias cfg_showGpuModel: page.cfg_showGpuModel
     property alias cfg_updateInterval: page.cfg_updateInterval
     property alias cfg_sortField: page.cfg_sortField
     property alias cfg_sortDescending: page.cfg_sortDescending
@@ -31,6 +32,7 @@ ScrollView {
         property alias cfg_showTextInCompact: showTextInCompact.checked
         property alias cfg_allowProcessTermination: allowProcessTerminationCheckBox.checked
         property alias cfg_showProcessIcons: showProcessIconsCheckBox.checked
+        property alias cfg_showGpuModel: showGpuModelCheckBox.checked
         property alias cfg_updateInterval: updateIntervalSpin.value
         property string cfg_sortField: "sm"
         property alias cfg_sortDescending: sortDescendingCheckBox.checked
@@ -116,6 +118,12 @@ ScrollView {
             id: showTextInCompact
             Kirigami.FormData.label: i18n("Panel Layout:")
             text: i18n("Show status text in compact mode (panel)")
+        }
+
+        CheckBox {
+            id: showGpuModelCheckBox
+            Kirigami.FormData.label: i18n("GPU Model:")
+            text: i18n("Show GPU model name in header and tooltip")
         }
 
         SpinBox {

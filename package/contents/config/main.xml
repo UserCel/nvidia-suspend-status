@@ -16,6 +16,9 @@
         <entry name="showProcessIcons" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="showGpuModel" type="Bool">
+            <default>true</default>
+        </entry>
         <entry name="updateInterval" type="Int">
             <default>3</default>
         </entry>

@@ -45,17 +45,30 @@ PlasmoidItem {
         return addr ? " -i " + addr : "";
     }
     readonly property string getProcessCmd: root.nvidiaSmiPath + " pmon -c 1" + root.smiTarget + "; echo \"---PROCESSES---\"; " + root.nvidiaSmiPath + root.smiTarget + "; echo \"---TELEMETRY---\"; " + root.nvidiaSmiPath + root.smiTarget + " --query-gpu=memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits"
-readonly property string configuredPciAddress: (plasmoid.configuration && plasmoid.configuration.pciAddress) ? String(plasmoid.configuration.pciAddress).trim() : "0000:01:00.0"
+    property bool showGpuModel: plasmoid.configuration && plasmoid.configuration.showGpuModel !== undefined ? plasmoid.configuration.showGpuModel : true
+    property string gpuModelName: ""
+    readonly property string configuredPciAddress: (plasmoid.configuration && plasmoid.configuration.pciAddress) ? String(plasmoid.configuration.pciAddress).trim() : "0000:01:00.0"
     readonly property string shortPciAddress: {
         const addr = root.configuredPciAddress;
         return addr.replace(/^0000:/, "");
     }
+    readonly property string cardDisplayName: (root.showGpuModel && root.gpuModelName) ? (root.gpuModelName + " (" + root.shortPciAddress + ")") : ("GPU (" + root.shortPciAddress + ")")
     readonly property string fuserCmd: "dev=\"/dev/nvidia$(grep -s 'Device Minor:' /proc/driver/nvidia/gpus/" + root.configuredPciAddress + "/information 2>/dev/null | awk '{print $NF}')\"; [ -e \"$dev\" ] || dev=\"/dev/nvidia0\"; fuser \"$dev\" /dev/nvidiactl /dev/nvidia-modeset 2>/dev/null"
     property bool isBackingOff: false
     property var baselineFuserPids: []
     property int idleCooldownTicks: 0
     readonly property int maxCooldownTicks: 3
     property double lastSmiQueryTime: 0
+
+    function cleanGpuModelName(raw) {
+        if (!raw) return "";
+        return raw.replace(/^NVIDIA\s+/i, "")
+                  .replace(/^GeForce\s+/i, "")
+                  .replace(/\s+Laptop\s+GPU/i, "")
+                  .replace(/\s+with\s+Max-Q\s+Design/i, " Max-Q")
+                  .replace(/\s+GPU$/i, "")
+                  .trim();
+    }
 
     function formatVramMb(mb) {
         if (!mb || isNaN(mb)) return "0 MB";
@@ -295,7 +308,7 @@ readonly property string configuredPciAddress: (plasmoid.configuration && plasmo
     }
 
     // --- Tooltip ---
-    toolTipMainText: i18n("NVIDIA GPU Status (%1)", root.shortPciAddress)
+    toolTipMainText: (root.showGpuModel && root.gpuModelName) ? (root.gpuModelName + " (" + root.shortPciAddress + ")") : i18n("NVIDIA GPU Status (%1)", root.shortPciAddress)
     toolTipSubText: i18n("Current State: %1", statusText)
 
     // --- Desktop / Panel Representation Helper ---
@@ -452,7 +465,9 @@ readonly property string configuredPciAddress: (plasmoid.configuration && plasmo
                             opacity: 0.8
                             font.bold: true
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            text: "GPU (" + root.shortPciAddress + ")"
+                            text: root.cardDisplayName
+                            Layout.maximumWidth: root.width - Kirigami.Units.gridUnit * 10
+                            elide: Text.ElideRight
                         }
                         PlasmaComponents3.Label {
                             opacity: 0.5
@@ -1057,7 +1072,22 @@ readonly property string configuredPciAddress: (plasmoid.configuration && plasmo
         }
     }
 
+    Plasma5Support.DataSource {
+        id: gpuModelSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            const stdout = (data["stdout"] || "").trim();
+            if (stdout) {
+                root.gpuModelName = root.cleanGpuModelName(stdout);
+            }
+        }
+    }
+
     Component.onCompleted: {
+        // Fetch GPU model passively from sysfs/proc (zero wake)
+        gpuModelSource.connectSource("grep -s '^Model:' /proc/driver/nvidia/gpus/" + root.configuredPciAddress + "/information 2>/dev/null | sed 's/Model:[ \t]*//'");
         // Search in common system paths, user path, and then system-wide which
         gpuProcessesSource.connectSource("for p in /usr/bin/nvidia-smi /usr/local/bin/nvidia-smi ~/.local/bin/nvidia-smi; do [ -x \"$p\" ] && echo \"$p\" && exit 0; done; which nvidia-smi");
         steamAppsSource.connectSource("echo \"HOME=$HOME\"; grep -hE '\"appid\"|\"name\"|\"installdir\"' ~/.local/share/Steam/steamapps/appmanifest_*.acf ~/.steam/root/steamapps/appmanifest_*.acf ~/.steam/steam/steamapps/appmanifest_*.acf 2>/dev/null");
